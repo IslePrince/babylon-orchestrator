@@ -1,0 +1,151 @@
+{
+  "$schema": "babylon-studio/schemas/project/v1",
+  "project_id": "{{PROJECT_SLUG}}",
+  "display_name": "{{PROJECT_NAME}}",
+  "schema_version": "1.0",
+
+  "source": {
+    "title": "{{SOURCE_TITLE}}",
+    "author": "{{SOURCE_AUTHOR}}",
+    "year": "{{SOURCE_YEAR}}",
+    "copyright_status": "{{COPYRIGHT_STATUS}}",
+    "source_file": "source/{{SOURCE_FILE}}"
+  },
+
+  "world": {
+    "period": "{{PERIOD}}",
+    "location": "{{LOCATION}}",
+    "visual_references": ["{{VISUAL_REF_1}}", "{{VISUAL_REF_2}}"],
+    "tone": "{{TONE}}"
+  },
+
+  "format": {
+    "master_aspect": "2.39:1",
+    "master_resolution": "3840x1607",
+    "master_fps": 24,
+    "distribution_formats": [
+      {
+        "id": "youtube_longform",
+        "label": "YouTube Long-form",
+        "aspect": "16:9",
+        "resolution": "3840x2160",
+        "enabled": true
+      },
+      {
+        "id": "vertical",
+        "label": "Vertical / Shorts",
+        "aspect": "9:16",
+        "resolution": "2160x3840",
+        "enabled": true
+      },
+      {
+        "id": "square",
+        "label": "Square / Instagram",
+        "aspect": "1:1",
+        "resolution": "2160x2160",
+        "enabled": false
+      }
+    ]
+  },
+
+  "pipeline": {
+    "current_stage": "not_started",
+    "stages": [
+      "ingest", "world_bible", "characters", "screenplay",
+      "cinematographer", "storyboard", "audio", "asset_manifest",
+      "mesh_generation", "animation", "scene_assembly",
+      "preview_render", "final_render", "post_export"
+    ],
+    "gates": {
+      "storyboard_to_audio": {
+        "approved": false,
+        "approved_by": null,
+        "approved_at": null,
+        "description": "Human storyboard review complete before ElevenLabs spend"
+      },
+      "audio_to_assets": {
+        "approved": false,
+        "approved_by": null,
+        "approved_at": null,
+        "description": "Audio approved before Meshy / Cartwheel spend"
+      },
+      "assets_to_scene": {
+        "approved": false,
+        "approved_by": null,
+        "approved_at": null,
+        "description": "Assets reviewed before UE5 scene assembly"
+      },
+      "preview_to_final": {
+        "approved": false,
+        "approved_by": null,
+        "approved_at": null,
+        "description": "Preview render approved before full 4K render"
+      }
+    },
+    "auto_advance": {
+      "enabled": true,
+      "transitions": {
+        "ingest_to_screenplay": true,
+        "screenplay_to_cinematographer": true,
+        "cinematographer_to_storyboard": true,
+        "audio_to_asset_manifest": true,
+        "mesh_batch_to_next_batch": true
+      }
+    }
+  },
+
+  "apis": {
+    "claude": {
+      "enabled": true,
+      "model": "claude-opus-4-5",
+      "budget_usd": 50.0
+    },
+    "elevenlabs": {
+      "enabled": true,
+      "model": "eleven_multilingual_v2",
+      "budget_usd": 30.0
+    },
+    "meshy": {
+      "enabled": true,
+      "budget_usd": 100.0
+    },
+    "cartwheel": {
+      "enabled": true,
+      "budget_usd": 50.0
+    },
+    "stabilityai": {
+      "enabled": true,
+      "budget_usd": 5.0
+    }
+  },
+
+  "git": {
+    "remote_url": "{{GIT_REMOTE_URL}}",
+    "main_branch": "main",
+    "lfs_patterns": [
+      "*.fbx", "*.glb", "*.mp3", "*.wav",
+      "*.png", "*.jpg", "*.exr", "*.hdr",
+      "*.uasset", "*.umap", "*.pak"
+    ]
+  },
+
+  "paths": {
+    "source":     "source",
+    "world":      "world",
+    "characters": "characters",
+    "chapters":   "chapters",
+    "assets":     "assets",
+    "audio":      "audio",
+    "meshes":     "meshes",
+    "animation":  "animation",
+    "renders":    "renders",
+    "exports":    "exports",
+    "costs":      "costs"
+  },
+
+  "meta": {
+    "created": "{{CREATED_AT}}",
+    "babylon_studio_version": "{{ORCHESTRATOR_VERSION}}",
+    "initialized_by": "{{INITIALIZED_BY}}"
+  }
+}

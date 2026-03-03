@@ -1,0 +1,23 @@
+# Babylon Studio Orchestrator — Python dependencies
+# Pinned versions for reproducible installs
+# Install: pip install -r requirements.txt
+
+# Anthropic Claude API
+anthropic==0.84.0
+
+# HTTP clients
+httpx==0.28.1
+requests==2.32.5
+
+# Environment variable management
+python-dotenv==1.2.1
+
+# Web UI
+flask==3.1.2
+
+# Git operations (project repo management)
+gitpython==3.1.46
+
+# CLI progress and formatting
+tqdm==4.67.3
+rich==14.3.3

@@ -1,0 +1,49 @@
+{
+  "schema_version": "1.0",
+  "project_id": null,
+  "version": "0.1",
+  "generated_at": null,
+  "status": "not_generated",
+
+  "_note": "This file is populated by the 'ingest' stage. Do not edit manually until after ingest has run.",
+
+  "visual_language": {
+    "overall_palette": null,
+    "lighting_philosophy": null,
+    "texture_approach": null,
+    "cinematography_style": null
+  },
+
+  "period_rules": {
+    "confirmed_elements": [],
+    "anachronism_watchlist": [],
+    "material_palette": [],
+    "architecture_notes": null
+  },
+
+  "locations": [],
+
+  "lighting_library": {
+    "time_of_day_presets": [],
+    "season": null,
+    "atmosphere": null
+  },
+
+  "costume_palette": {
+    "class_hierarchy": [],
+    "fabric_types": [],
+    "colour_associations": []
+  },
+
+  "audio_world": {
+    "ambient_soundscape": null,
+    "music_direction": null,
+    "silence_philosophy": null
+  },
+
+  "vertical_reframe_rules": {
+    "default_strategy": "center_crop",
+    "character_priority": "follow_speaker",
+    "notes": null
+  }
+}

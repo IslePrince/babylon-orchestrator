@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0",
+  "project_id": null,
+  "totals": {
+    "claude": 0.0,
+    "elevenlabs": 0.0,
+    "meshy": 0.0,
+    "cartwheel": 0.0,
+    "stabilityai": 0.0,
+    "total": 0.0
+  },
+  "by_stage": {},
+  "by_chapter": {},
+  "transactions": [],
+  "last_updated": null
+}

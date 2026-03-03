@@ -1,0 +1,22 @@
+# Babylon Studio Project — .gitignore
+
+# Secrets
+.env
+*.key
+
+# OS
+.DS_Store
+.AppleDouble
+Thumbs.db
+
+# Python cache (if any scripts run in project dir)
+__pycache__/
+*.py[cod]
+
+# Temp / scratch files
+tmp/
+temp/
+scratch/
+
+# Large binary files are tracked via Git LFS (see .gitattributes)
+# Do NOT add *.fbx, *.mp3 etc here — LFS handles them
