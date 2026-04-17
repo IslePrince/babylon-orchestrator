@@ -2518,6 +2518,53 @@ class PropsAndStagingStage(PipelineStage):
 
 
 # ------------------------------------------------------------------
+# Stage: Diversify Split Storyboards
+# ------------------------------------------------------------------
+
+class DiversifyStoryboardsStage(PipelineStage):
+    """For shots flagged as split continuations (ids ending in a
+    letter suffix, labels ending ``(cont'd)`` / ``(recovered)``),
+    ask Claude for an alternate camera angle and re-render the
+    storyboard (both 16:9 and 9:16) through ComfyUI.
+
+    Uses the parent's seed + the same LoRA config path as the main
+    StoryboardStage so character identity stays locked across the
+    cut. Stale preview mp4s on the touched shots are cleared — run
+    preview_video afterwards to regenerate them against the new
+    frames.
+
+    GPU-bound — acquires the lock inside the diversify util via
+    ``gpu_exclusive`` so it serializes with other ComfyUI stages.
+    """
+
+    def run(self, chapter_id: str, shot_id: Optional[str] = None,
+            dry_run: bool = False, progress_callback=None) -> dict:
+        def _progress(pct, msg, cost=0.0):
+            if progress_callback:
+                progress_callback(pct, msg, cost)
+
+        print(f"\n{'-'*55}")
+        print(f"  STAGE: Diversify Storyboards — {chapter_id}"
+              + (f" / {shot_id}" if shot_id else ""))
+        print(f"{'-'*55}")
+
+        _progress(5, "Scanning for continuation shots...")
+        from utils.diversify_split_storyboards import diversify_chapter
+        # The util handles per-shot progress to stdout; we emit
+        # coarse endpoints around it so the SSE progress bar moves.
+        _progress(10, "Rendering alternate-angle storyboards...")
+        result = diversify_chapter(
+            project=self.project, chapter_id=chapter_id,
+            only_shot=shot_id, dry_run=dry_run,
+        )
+        _progress(100, (
+            f"Done — diversified {result.get('diversified', 0)} of "
+            f"{result.get('to_diversify', 0)} continuation(s)"
+        ))
+        return result
+
+
+# ------------------------------------------------------------------
 # Stage: Preview Video (Wan 2.1 + InfiniTalk)
 # ------------------------------------------------------------------
 

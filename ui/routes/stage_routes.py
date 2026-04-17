@@ -52,6 +52,7 @@ STAGE_MAP = {
     "sound_fx":         "stages.pipeline:SoundFXStage",
     "audio_score":      "stages.pipeline:AudioScoreStage",
     "preview_video":    "stages.pipeline:PreviewVideoStage",
+    "diversify_storyboards": "stages.pipeline:DiversifyStoryboardsStage",
     "assets":           "stages.pipeline:AssetManifestStage",
     "props_staging":    "stages.pipeline:PropsAndStagingStage",
     "meshes":           "stages.mesh_animation:MeshStage",
@@ -186,6 +187,10 @@ def run_stage(slug):
             run_kwargs["force"] = True
         if data.get("seed") is not None:
             run_kwargs["seed"] = int(data["seed"])
+    elif stage_name == "diversify_storyboards":
+        run_kwargs["chapter_id"] = data.get("chapter_id")
+        if data.get("shot_id"):
+            run_kwargs["shot_id"] = data["shot_id"]
 
     def _run():
         logger.info(f"[{job_id}] Starting stage '{stage_name}' for project '{slug}'")

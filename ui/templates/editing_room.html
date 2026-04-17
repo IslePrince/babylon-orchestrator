@@ -17,7 +17,7 @@
     <div class="flex-1"></div>
 
     <!-- Batch actions -->
-    <div class="flex items-center gap-1">
+    <div class="flex items-center gap-1 flex-wrap">
       <button onclick="EditingRoom.batchAction('enable_all')"
               class="bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs px-2.5 py-1.5 rounded transition-colors"
               title="Enable all shots">Enable All</button>
@@ -36,6 +36,11 @@
               class="bg-amber-700 hover:bg-amber-600 text-white text-xs px-2.5 py-1.5 rounded transition-colors"
               title="Batch-render Wan 2.1 preview videos for every shot in this chapter (dialogue -> InfiniTalk, silent -> I2V)">
         Generate All Previews
+      </button>
+      <button onclick="EditingRoom.diversifyStoryboards()"
+              class="bg-purple-700 hover:bg-purple-600 text-white text-xs px-2.5 py-1.5 rounded transition-colors"
+              title="Re-render each split-continuation shot with an alternate camera angle so the cut doesn't show the same frame twice. Uses parent seed + LoRAs so character identity stays locked.">
+        Diversify Split Storyboards
       </button>
     </div>
 

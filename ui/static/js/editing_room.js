@@ -832,6 +832,52 @@ const EditingRoom = {
     }
   },
 
+  // Ask Claude for alternate camera angles on every split-
+  // continuation shot and re-render via ComfyUI so the cut doesn't
+  // show the same frame across both halves of a split. Reuses parent
+  // seed + LoRAs so identity stays locked.
+  async diversifyStoryboards() {
+    if (!EditingRoom.chapterId) {
+      App.showToast('Select a chapter first', 'warning');
+      return;
+    }
+    const shots = EditingRoom.shots || [];
+    // Count continuations (label ending in (cont'd) or (recovered),
+    // or id ending with a letter suffix) so the confirm tells the
+    // user what to expect.
+    const suffix = /_sh\d+[a-z]$/;
+    const continuations = shots.filter(s =>
+      suffix.test(s.shot_id || "") ||
+      /\(cont'd\)|\(recovered\)/.test(s.label || "")
+    );
+    if (!continuations.length) {
+      App.showToast('No split continuations found in this chapter', 'info');
+      return;
+    }
+    const estMin = Math.ceil(continuations.length * 60 / 60);  // ~60s/shot across both orientations
+    if (!confirm(
+      `Re-render ${continuations.length} continuation storyboard(s) ` +
+      `with alternate angles?\n\n` +
+      `Each shot gets a Claude-suggested framing (reverse, close-up ` +
+      `insert, push-in, etc.) + ComfyUI re-render of both 16:9 and ` +
+      `9:16, using the parent shot's seed + LoRAs so characters stay ` +
+      `on-model.\n\n` +
+      `Estimated ~${estMin} min of ComfyUI time on your 4090.\n\n` +
+      `Stale preview.mp4 files on the touched shots will be cleared ` +
+      `so the next Generate All Previews re-renders them against the ` +
+      `new frames.`
+    )) return;
+    try {
+      await StageRunner.run('diversify_storyboards', {
+        chapter_id: EditingRoom.chapterId,
+      });
+      App.showToast('Diversify complete — reloading', 'success');
+      await EditingRoom.load();
+    } catch (e) {
+      App.showToast(`Diversify failed: ${e.message || e}`, 'error');
+    }
+  },
+
   // Batch-render Wan 2.1 preview videos across every shot in the
   // currently-loaded chapter. PreviewVideoStage auto-skips shots that
   // already have a preview for the chosen orientation unless force is
