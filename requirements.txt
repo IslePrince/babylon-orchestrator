@@ -24,3 +24,6 @@ google-genai==1.12.1
 # CLI progress and formatting
 tqdm==4.67.3
 rich==14.3.3
+
+# MCP server (exposes the orchestrator to remote AI agents over LAN)
+mcp>=1.25.0

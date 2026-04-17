@@ -80,6 +80,21 @@ Or use the CLI directly:
 python orchestrator.py --project ~/studio/projects/my_project status
 ```
 
+Or expose the pipeline to a remote AI agent over the LAN:
+
+```bash
+python mcp_server.py --projects-dir ~/studio/projects \
+  --host 0.0.0.0 --port 5758
+# Client connects to http://<host>:5758/sse
+# See MCP_GUIDE.md for the agent-facing tool reference.
+```
+
+The MCP server has **no authentication** — it is intended for trusted
+LAN use only. It exposes the whole production pipeline (project
+creation, ingest, screenplay, character casting, storyboards, voice
+recording, sound FX, Wan 2.1 + InfiniTalk preview video) as 43 tools
+an agent can call to build short-form videos end-to-end.
+
 ---
 
 ## Creating a Project
