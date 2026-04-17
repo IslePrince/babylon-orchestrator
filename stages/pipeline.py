@@ -2787,6 +2787,20 @@ class PreviewVideoStage(PipelineStage):
         mode_label = "silent" if silent_mode else f"{len(speakers)}-speaker talking"
         print(f"  {mode_label}, total {total_dur:.2f}s, {width}x{height}")
 
+        # Hard cap — Wan+InfiniTalk degrades past ~10s and has been
+        # observed to wedge the ComfyUI sampler entirely on 20s+
+        # clips. Callers should run ``utils/split_long_shots.py``
+        # first so oversized slices become two consecutive shots.
+        _MAX_SLICE_SEC = float(os.getenv("PREVIEW_VIDEO_MAX_SEC", "12"))
+        if total_dur > _MAX_SLICE_SEC:
+            raise ValueError(
+                f"Shot {shot_id} slice is {total_dur:.1f}s, which "
+                f"exceeds PREVIEW_VIDEO_MAX_SEC={_MAX_SLICE_SEC}s. "
+                f"Split it first: "
+                f"`python3 utils/split_long_shots.py --project <path> "
+                f"--chapter {chapter_id} --max-seconds {int(_MAX_SLICE_SEC)}`"
+            )
+
         if dry_run:
             _progress(100, f"Dry run: would render {total_dur:.2f}s video")
             return {

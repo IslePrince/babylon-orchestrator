@@ -1069,6 +1069,82 @@ def check_drift(slug: str) -> dict:
 
 
 @mcp.tool()
+def comfyui_unstick(force: bool = False, wait_sec: float = 5.0,
+                   comfyui_url: str | None = None) -> dict:
+    """Recover a wedged ComfyUI server by sending /interrupt and
+    clearing the pending queue. If the current job is still running
+    after ``wait_sec`` and ``force`` is true, hard-kill the ComfyUI
+    process on the port. Returns before/after queue state.
+
+    Use this when preview_video or storyboard jobs have been running
+    impossibly long (e.g. 30+ minutes on a shot that should take
+    minutes) — the sampler has hung and is consuming the GPU.
+    """
+    import httpx
+    import os
+    from urllib.parse import urlparse
+
+    base = (comfyui_url or os.getenv("COMFYUI_URL",
+                                     "http://localhost:8000")).rstrip("/")
+    result: dict[str, Any] = {"url": base}
+    with httpx.Client(timeout=15) as c:
+        try:
+            before = c.get(f"{base}/queue").json()
+        except httpx.HTTPError as e:
+            return {"status": "unreachable", "error": str(e)}
+        result["before"] = {
+            "running": len(before.get("queue_running", [])),
+            "pending": len(before.get("queue_pending", [])),
+        }
+        c.post(f"{base}/interrupt")
+        c.post(f"{base}/queue", json={"clear": True})
+        time.sleep(wait_sec)
+        after = c.get(f"{base}/queue").json()
+        result["after"] = {
+            "running": len(after.get("queue_running", [])),
+            "pending": len(after.get("queue_pending", [])),
+        }
+
+    if result["after"]["running"] == 0:
+        result["status"] = "recovered_soft"
+        return result
+
+    if not force:
+        result["status"] = "still_running"
+        result["advice"] = "Call again with force=True to hard-kill."
+        return result
+
+    # Hard kill.
+    import subprocess
+    port = urlparse(base).port or 8000
+    try:
+        ns = subprocess.run(["netstat", "-ano"],
+                            capture_output=True, text=True, check=True).stdout
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        return {**result, "status": "kill_failed", "error": str(e)}
+    pid = None
+    for line in ns.splitlines():
+        if "LISTENING" in line and f":{port} " in line:
+            parts = line.split()
+            if parts[-1].isdigit():
+                pid = int(parts[-1])
+                break
+    if pid is None:
+        return {**result, "status": "no_pid_found", "port": port}
+    try:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/F", "/PID", str(pid)], check=True)
+        else:
+            os.kill(pid, 9)
+        result["status"] = "killed"
+        result["killed_pid"] = pid
+    except Exception as e:  # noqa: BLE001
+        result["status"] = "kill_failed"
+        result["error"] = str(e)
+    return result
+
+
+@mcp.tool()
 def gpu_status() -> dict:
     """Return info about the GPU lock: whether a GPU-heavy stage
     (preview video, storyboard, character sheets, LoRA training,
