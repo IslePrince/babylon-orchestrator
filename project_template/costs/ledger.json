@@ -6,9 +6,10 @@
     "elevenlabs": 0.0,
     "meshy": 0.0,
     "cartwheel": 0.0,
-    "stabilityai": 0.0,
+    "google_imagen": 0.0,
     "total": 0.0
   },
+  "by_api": {},
   "by_stage": {},
   "by_chapter": {},
   "transactions": [],

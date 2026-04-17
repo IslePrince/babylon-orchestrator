@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% block title %}Editing Room — Babylon Studio{% endblock %}
+
+{% block content %}
+<div id="editing-room-root">
+
+  <!-- Controls bar -->
+  <div class="flex items-center gap-4 mb-4 flex-wrap">
+    <h2 class="text-lg font-semibold text-gray-100">Editing Room</h2>
+
+    <select id="er-chapter-select"
+            onchange="EditingRoom.load()"
+            class="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm text-gray-200 focus:outline-none focus:ring-1 focus:ring-babylon-500">
+      <option value="">Select chapter...</option>
+    </select>
+
+    <div class="flex-1"></div>
+
+    <!-- Batch actions -->
+    <div class="flex items-center gap-1">
+      <button onclick="EditingRoom.batchAction('enable_all')"
+              class="bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs px-2.5 py-1.5 rounded transition-colors"
+              title="Enable all shots">Enable All</button>
+      <button onclick="EditingRoom.batchAction('disable_non_dialogue')"
+              class="bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs px-2.5 py-1.5 rounded transition-colors"
+              title="Disable shots without dialogue">Disable Non-Dialogue</button>
+      <button onclick="EditingRoom.batchAction('reset')"
+              class="bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs px-2.5 py-1.5 rounded transition-colors"
+              title="Reset all edit decisions">Reset</button>
+      <button onclick="EditingRoom.generateSfx()"
+              class="bg-amber-700 hover:bg-amber-600 text-white text-xs px-2.5 py-1.5 rounded transition-colors ml-2"
+              title="Generate sound effects for this chapter (ComfyUI-first with ElevenLabs fallback for tonal SFX)">
+        Generate Sound FX
+      </button>
+      <button onclick="EditingRoom.generateAllPreviews()"
+              class="bg-amber-700 hover:bg-amber-600 text-white text-xs px-2.5 py-1.5 rounded transition-colors"
+              title="Batch-render Wan 2.1 preview videos for every shot in this chapter (dialogue -> InfiniTalk, silent -> I2V)">
+        Generate All Previews
+      </button>
+    </div>
+
+    <button id="er-play-cut-btn"
+            onclick="EditingRoom.playCut()"
+            class="bg-babylon-700 hover:bg-babylon-600 text-white text-sm px-4 py-1.5 rounded transition-colors flex items-center gap-1">
+      &#9654; Play Cut (Space)
+    </button>
+    <button onclick="EditingRoom.stopCut()"
+            class="bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm px-3 py-1.5 rounded transition-colors">
+      &#9632; Stop
+    </button>
+
+    <div class="flex items-center gap-1 text-xs text-gray-500">
+      <kbd class="px-1.5 py-0.5 bg-gray-800 rounded border border-gray-700">&larr;&rarr;</kbd> nav
+      <kbd class="px-1.5 py-0.5 bg-gray-800 rounded border border-gray-700 ml-2">D</kbd> toggle
+      <kbd class="px-1.5 py-0.5 bg-gray-800 rounded border border-gray-700 ml-1">P</kbd> play audio
+      <kbd class="px-1.5 py-0.5 bg-gray-800 rounded border border-gray-700 ml-2">Space</kbd> play cut
+    </div>
+  </div>
+
+  <!-- Summary stats bar -->
+  <div id="er-stats-bar" class="flex items-center gap-6 px-4 py-2.5 mb-4 bg-gray-900/60 rounded-lg border border-gray-800">
+    <div class="text-xs text-gray-400">
+      <span class="text-gray-200 font-medium" id="er-stat-enabled">0</span>/<span id="er-stat-total">0</span> shots
+    </div>
+    <div class="text-xs text-gray-400">
+      Original: <span class="text-gray-200 font-medium" id="er-stat-original-dur">0:00</span>
+    </div>
+    <div class="text-xs text-gray-400">
+      Cut: <span class="text-green-400 font-medium" id="er-stat-cut-dur">0:00</span>
+    </div>
+    <div class="text-xs text-gray-400">
+      Removed: <span class="text-red-400 font-medium" id="er-stat-removed">0%</span>
+    </div>
+    <div id="er-dialogue-warning" class="hidden text-xs text-amber-400 flex items-center gap-1">
+      <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.168 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg>
+      <span id="er-dialogue-warning-text"></span>
+    </div>
+  </div>
+
+  <!-- Playback progress -->
+  <div id="er-playback-progress" style="display:none" class="mb-4">
+    <div class="flex items-center gap-2 mb-1">
+      <span id="er-playback-label" class="text-xs text-gray-400"></span>
+    </div>
+    <div class="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
+      <div id="er-playback-fill" class="h-full bg-babylon-500 rounded-full transition-all duration-300" style="width:0%"></div>
+    </div>
+  </div>
+
+  <!-- Timeline strip (horizontal scrollable) -->
+  <div id="er-timeline" class="flex gap-1.5 overflow-x-auto pb-3 mb-4 scroll-smooth"
+       style="scrollbar-width: thin; scrollbar-color: #374151 #111827;">
+    <div class="text-gray-600 text-sm p-4">Select a chapter to load the timeline</div>
+  </div>
+
+  <!-- Selected shot detail panel -->
+  <div id="er-detail" class="bg-gray-900 rounded-lg border border-gray-800 p-4" style="display:none">
+    <div class="flex gap-6">
+      <!-- Storyboard images (16:9 master + 9:16 vertical) -->
+      <div class="w-80 flex-shrink-0 flex gap-2 items-start">
+        <div id="er-detail-image" class="bg-gray-800 rounded-lg overflow-hidden aspect-video flex-1 flex items-center justify-center">
+          <span class="text-gray-600 text-sm">No image</span>
+        </div>
+        <div id="er-detail-image-vertical" class="bg-gray-800 rounded-lg overflow-hidden flex items-center justify-center shrink-0"
+             style="width: 72px; aspect-ratio: 9 / 16;">
+          <span class="text-[10px] text-gray-600">9:16</span>
+        </div>
+      </div>
+
+      <!-- Shot info + edit controls -->
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-3 mb-3">
+          <h3 id="er-detail-shot-id" class="text-sm font-mono text-gray-300"></h3>
+          <span id="er-detail-shot-type" class="px-2 py-0.5 rounded text-xs bg-gray-800 text-gray-400"></span>
+          <div class="flex-1"></div>
+          <!-- Enable/Disable toggle -->
+          <label class="flex items-center gap-2 cursor-pointer select-none">
+            <span class="text-xs text-gray-400">Enabled</span>
+            <div class="relative">
+              <input type="checkbox" id="er-detail-enabled" onchange="EditingRoom.toggleEnable()"
+                     class="sr-only peer">
+              <div class="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer
+                          peer-checked:after:translate-x-full peer-checked:after:border-white
+                          after:content-[''] after:absolute after:top-[2px] after:left-[2px]
+                          after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all
+                          peer-checked:bg-green-600"></div>
+            </div>
+          </label>
+        </div>
+
+        <p id="er-detail-label" class="text-sm text-gray-300 mb-3"></p>
+
+        <!-- Characters -->
+        <div id="er-detail-characters" class="flex gap-1 mb-3 flex-wrap"></div>
+
+        <!-- Dialogue -->
+        <div id="er-detail-dialogue" class="mb-4"></div>
+
+        <!-- Preview Mix controls (above the audio list so they're
+             visible without scrolling past every SFX row) -->
+        <div id="er-detail-mix-controls" class="mb-2 flex items-center gap-2 flex-wrap" style="display:none">
+          <button id="er-preview-mix" onclick="EditingRoom.previewMix()"
+                  class="bg-babylon-700 hover:bg-babylon-600 text-white text-xs px-3 py-1.5 rounded transition-colors flex items-center gap-1">
+            <span>&#9654;</span> Preview Mix (dialogue + SFX)
+          </button>
+          <button onclick="EditingRoom.stopMix()"
+                  class="bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs px-2.5 py-1.5 rounded transition-colors">
+            Stop
+          </button>
+          <button id="er-gen-video" onclick="EditingRoom.generatePreviewVideo('horizontal')"
+                  class="bg-amber-700 hover:bg-amber-600 text-white text-xs px-3 py-1.5 rounded transition-colors ml-2"
+                  title="Render a Wan 2.1 talking-head / silent I2V video for this shot, 16:9 (free, local, ~10s per sec of output)">
+            Generate 16:9 Preview
+          </button>
+          <button id="er-gen-video-vertical" onclick="EditingRoom.generatePreviewVideo('vertical')"
+                  class="bg-amber-700 hover:bg-amber-600 text-white text-xs px-3 py-1.5 rounded transition-colors"
+                  title="Render the 9:16 vertical-reframe storyboard as a talking-head / silent video">
+            Generate 9:16 Preview
+          </button>
+          <button id="er-mix-preview" onclick="EditingRoom.mixPreviewAudio()"
+                  class="bg-gray-700 hover:bg-gray-600 text-gray-200 text-xs px-3 py-1.5 rounded transition-colors"
+                  title="Layer the shot's SFX onto the existing preview.mp4 without re-rendering the video (re-mixes from the pristine Wan output kept in preview_raw.mp4)">
+            Mix SFX into Preview
+          </button>
+          <span id="er-mix-status" class="text-[10px] text-gray-500"></span>
+        </div>
+
+        <!-- Audio playback -->
+        <div id="er-detail-audio" class="mb-4"></div>
+
+        <!-- Duration slider -->
+        <div class="mb-4">
+          <div class="flex items-center gap-3">
+            <label class="text-xs text-gray-500 w-20">Duration</label>
+            <input type="range" id="er-detail-duration" min="0.5" max="20" step="0.1"
+                   onchange="EditingRoom.updateDuration()"
+                   oninput="document.getElementById('er-detail-duration-val').textContent = this.value + 's'"
+                   class="flex-1 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-babylon-500">
+            <span id="er-detail-duration-val" class="text-xs text-gray-300 w-12 text-right"></span>
+            <button onclick="EditingRoom.resetDuration()"
+                    class="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                    title="Reset to original duration">Reset</button>
+          </div>
+          <div class="flex items-center gap-3 mt-1">
+            <span class="w-20"></span>
+            <span id="er-detail-original-dur" class="text-[10px] text-gray-600"></span>
+          </div>
+        </div>
+
+        <!-- Notes -->
+        <div>
+          <label class="text-xs text-gray-500">Edit Notes</label>
+          <input type="text" id="er-detail-notes"
+                 onchange="EditingRoom.updateNotes()"
+                 placeholder="Why this cut..."
+                 class="w-full mt-1 bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200
+                        placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-babylon-500">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lock Cut section -->
+  <div id="er-lock-cut" class="mt-6 p-4 bg-gray-900 rounded-lg border border-gray-800" style="display:none">
+    <div class="flex items-center gap-4">
+      <div class="flex-1">
+        <h3 class="text-sm font-semibold text-gray-200 mb-1">Ready to proceed?</h3>
+        <p id="er-lock-summary" class="text-xs text-gray-400"></p>
+        <p id="er-lock-warning" class="text-xs text-amber-400 mt-1 hidden"></p>
+      </div>
+      <button onclick="EditingRoom.lockCut()"
+              class="bg-babylon-600 hover:bg-babylon-500 text-white text-sm px-6 py-2 rounded transition-colors font-medium">
+        Lock Cut &amp; Approve for Sound
+      </button>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/editing_room.js') }}"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => EditingRoom.init('{{ slug }}'));
+</script>
+{% endblock %}

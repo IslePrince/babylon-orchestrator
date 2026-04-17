@@ -61,13 +61,13 @@ class GitManager:
         with open(gitignore, "w") as f:
             f.writelines(ignored)
 
-        print(f"  ✓ Git repo initialized with LFS at {self.root}")
+        print(f"  [OK] Git repo initialized with LFS at {self.root}")
 
     def initial_commit(self):
         """Commit the initial schema tree."""
         self._git("add", ".")
         self._git("commit", "-m", "init: project schema tree created")
-        print("  ✓ Initial commit: project schema tree")
+        print("  [OK] Initial commit: project schema tree")
 
     # ------------------------------------------------------------------
     # Branch strategy
@@ -85,11 +85,11 @@ class GitManager:
         # Check if branch already exists
         result = self._git("branch", "--list", branch, check=False)
         if result.stdout.strip():
-            print(f"  ℹ Branch '{branch}' already exists, checking out")
+            print(f"  [INFO] Branch '{branch}' already exists, checking out")
             self._git("checkout", branch)
         else:
             self._git("checkout", "-b", branch, from_branch)
-            print(f"  ✓ Created branch '{branch}' from '{from_branch}'")
+            print(f"  [OK] Created branch '{branch}' from '{from_branch}'")
 
     def checkout(self, branch: str):
         self._git("checkout", branch)
@@ -125,10 +125,10 @@ class GitManager:
         msg = message or f"{stage}: {entity_id} artifacts committed"
         result = self._git("commit", "-m", msg, "--allow-empty", check=False)
         if result.returncode == 0:
-            print(f"  ✓ Committed: {msg}")
+            print(f"  [OK] Committed: {msg}")
         else:
             if "nothing to commit" in result.stdout:
-                print(f"  ℹ Nothing new to commit for {entity_id}")
+                print(f"  [INFO] Nothing new to commit for {entity_id}")
             else:
                 raise RuntimeError(f"Commit failed: {result.stderr}")
 
@@ -137,7 +137,7 @@ class GitManager:
         branch = self.branch_name(stage, entity_id)
         self.checkout_main()
         self._git("merge", "--no-ff", branch, "-m", f"merge: {branch} approved and merged")
-        print(f"  ✓ Merged '{branch}' into main")
+        print(f"  [OK] Merged '{branch}' into main")
 
     # ------------------------------------------------------------------
     # Version tagging
@@ -146,13 +146,13 @@ class GitManager:
     def tag_world_version(self, version: str):
         tag = f"world-v{version}"
         self._git("tag", "-a", tag, "-m", f"World bible version {version}")
-        print(f"  ✓ Tagged world version: {tag}")
+        print(f"  [OK] Tagged world version: {tag}")
 
     def tag_chapter_complete(self, chapter_id: str):
         timestamp = datetime.now().strftime("%Y%m%d")
         tag = f"{chapter_id}-complete-{timestamp}"
         self._git("tag", "-a", tag, "-m", f"Chapter {chapter_id} final render complete")
-        print(f"  ✓ Tagged chapter complete: {tag}")
+        print(f"  [OK] Tagged chapter complete: {tag}")
 
     # ------------------------------------------------------------------
     # History and rollback

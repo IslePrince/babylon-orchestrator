@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Costs — Babylon Studio{% endblock %}
+
+{% block content %}
+<div id="costs-root">
+
+  <div class="flex items-center justify-between mb-6">
+    <h2 class="text-lg font-semibold text-gray-100">Cost Ledger</h2>
+    <div class="flex gap-2">
+      <button onclick="Costs.toggleBudgetEdit()"
+              id="budget-edit-btn"
+              class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded transition-colors">
+        Edit Budgets
+      </button>
+      <button onclick="Costs.exportCSV()"
+              class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded transition-colors">
+        Export CSV
+      </button>
+    </div>
+  </div>
+
+  <!-- Budget gauges -->
+  <div id="cost-gauges" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+  </div>
+
+  <!-- Charts row -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+    <div class="card p-4">
+      <h3 class="text-sm font-semibold text-gray-300 mb-3">Cumulative Spend</h3>
+      <canvas id="chart-cumulative" height="200"></canvas>
+    </div>
+    <div class="card p-4">
+      <h3 class="text-sm font-semibold text-gray-300 mb-3">Spend by Stage</h3>
+      <canvas id="chart-by-stage" height="200"></canvas>
+    </div>
+  </div>
+
+  <!-- Transaction log -->
+  <div class="card p-4">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-sm font-semibold text-gray-300">Transactions</h3>
+      <div class="flex items-center gap-2">
+        <select id="cost-filter-api"
+                onchange="Costs.filterTransactions()"
+                class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:ring-1 focus:ring-babylon-500">
+          <option value="">All APIs</option>
+        </select>
+        <span id="cost-tx-count" class="text-xs text-gray-500"></span>
+      </div>
+    </div>
+    <div id="cost-transactions" class="overflow-x-auto"></div>
+    <div id="cost-pagination" class="flex justify-center gap-2 mt-3"></div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/costs.js') }}"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => Costs.init('{{ slug }}'));
+</script>
+{% endblock %}

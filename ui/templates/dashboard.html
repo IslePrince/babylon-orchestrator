@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Babylon Studio{% endblock %}
+
+{% block content %}
+<div id="dashboard-root">
+
+  <!-- Pipeline Stepper -->
+  <div id="pipeline-stepper" class="mb-6">
+    <div class="skeleton h-10 w-full"></div>
+  </div>
+
+  <!-- Stage Runner Controls -->
+  <div class="mb-6 card p-4">
+    <div class="flex items-center gap-3 flex-wrap">
+      <h3 class="text-sm font-semibold text-gray-300 mr-2">Run Stage</h3>
+      <select id="stage-select" onchange="Dashboard._onStageChange()" class="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm text-gray-200 focus:outline-none focus:ring-1 focus:ring-babylon-500">
+        <option value="ingest">Ingest</option>
+        <option value="screenplay">Screenplay</option>
+        <option value="characters">Characters</option>
+        <option value="character_sheets">Character Sheets (LoRA)</option>
+        <option value="lora_training">LoRA Training</option>
+        <option value="voice_recording">Voice Recording</option>
+        <option value="cinematographer">Cinematographer</option>
+        <option value="storyboard">Storyboard</option>
+        <option value="sound_fx">Sound FX</option>
+        <option value="audio_score">Audio Score</option>
+        <option value="assets">Asset Manifest</option>
+        <option value="meshes">Mesh Generation</option>
+        <option value="animate">Animation</option>
+      </select>
+      <input type="text" id="stage-source-path" placeholder="Path to source .txt file"
+             class="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm text-gray-200 focus:outline-none focus:ring-1 focus:ring-babylon-500 w-64" />
+      <select id="stage-chapter-select" class="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm text-gray-200 focus:outline-none focus:ring-1 focus:ring-babylon-500 hidden">
+        <option value="">All chapters</option>
+      </select>
+      <label class="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer">
+        <input type="checkbox" id="stage-dry-run" class="rounded bg-gray-800 border-gray-600 text-babylon-500 focus:ring-babylon-500">
+        Dry run
+      </label>
+      <label id="stage-force-label" class="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer hidden">
+        <input type="checkbox" id="stage-force" class="rounded bg-gray-800 border-gray-600 text-babylon-500 focus:ring-babylon-500">
+        Force regen
+      </label>
+      <button onclick="Dashboard.runStage()"
+              class="px-3 py-1.5 bg-babylon-600 hover:bg-babylon-500 text-white text-sm rounded transition-colors">
+        Run
+      </button>
+    </div>
+  </div>
+
+  <!-- Chapter Cards Grid -->
+  <h2 class="text-lg font-semibold text-gray-100 mb-4">Production Board</h2>
+  <div id="chapter-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+    <div class="skeleton h-32 w-full"></div>
+    <div class="skeleton h-32 w-full"></div>
+    <div class="skeleton h-32 w-full"></div>
+  </div>
+
+  <!-- Chapter Detail Panel (expanded below grid) -->
+  <div id="chapter-detail" class="mt-6 hidden"></div>
+
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => Dashboard.load('{{ slug }}'));
+</script>
+{% endblock %}

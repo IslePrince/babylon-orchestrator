@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Characters — Babylon Studio{% endblock %}
+
+{% block content %}
+<div id="characters-root">
+
+  <div class="flex items-center justify-between mb-6">
+    <h2 class="text-lg font-semibold text-gray-100">Character Profiles</h2>
+    <div class="flex items-center gap-3">
+      <button id="regen-visuals-btn" class="hidden bg-amber-700 hover:bg-amber-600 text-white text-xs px-3 py-1.5 rounded transition-colors whitespace-nowrap"
+              onclick="Characters.regenerateVisuals()">
+        Regenerate Visual Tags
+      </button>
+      <button id="gen-missing-visuals-btn" class="hidden bg-purple-700 hover:bg-purple-600 text-white text-xs px-3 py-1.5 rounded transition-colors whitespace-nowrap"
+              onclick="Characters.generateMissingVisuals()">
+        Generate Missing Visuals
+      </button>
+      <span id="char-count" class="text-sm text-gray-500"></span>
+    </div>
+  </div>
+
+  <!-- Character Cards Grid -->
+  <div id="character-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+    <div class="skeleton h-40 w-full"></div>
+    <div class="skeleton h-40 w-full"></div>
+    <div class="skeleton h-40 w-full"></div>
+  </div>
+
+  <!-- Character Detail Panel (expanded below grid) -->
+  <div id="character-detail" class="mt-6 hidden"></div>
+
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/characters.js') }}"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => Characters.init('{{ slug }}'));
+</script>
+{% endblock %}

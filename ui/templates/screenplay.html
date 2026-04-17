@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Screenplay — Babylon Studio{% endblock %}
+
+{% block content %}
+<div id="screenplay-root">
+
+  <!-- Controls bar -->
+  <div class="flex items-center gap-4 mb-4 flex-wrap">
+    <h2 class="text-lg font-semibold text-gray-100">Screenplay</h2>
+
+    <select id="sp-chapter-select"
+            onchange="Screenplay.load()"
+            class="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm text-gray-200 focus:outline-none focus:ring-1 focus:ring-babylon-500">
+      <option value="">Select chapter...</option>
+    </select>
+
+    <div id="sp-status-badge"></div>
+
+    <div class="flex-1"></div>
+
+    <!-- View mode buttons -->
+    <div id="sp-view-controls" class="flex items-center gap-2">
+      <button id="sp-approve-btn" onclick="Screenplay.toggleApproval()" class="hidden px-3 py-1.5 rounded text-sm font-medium transition-colors">
+        Approve
+      </button>
+      <button id="sp-edit-btn" onclick="Screenplay.enterEditMode()" class="hidden px-3 py-1.5 rounded text-sm font-medium bg-gray-700 hover:bg-gray-600 text-gray-200 transition-colors">
+        &#9998; Edit
+      </button>
+    </div>
+
+    <!-- Edit mode buttons (hidden by default) -->
+    <div id="sp-edit-controls" class="hidden flex items-center gap-2">
+      <button id="sp-undo-btn" onclick="Screenplay.undo()" class="px-3 py-1.5 rounded text-sm font-medium bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-gray-200 transition-colors" title="Restore previous version">
+        Undo
+      </button>
+      <button onclick="Screenplay.exitEditMode()" class="px-3 py-1.5 rounded text-sm font-medium bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-gray-200 transition-colors">
+        Discard
+      </button>
+      <button id="sp-save-btn" onclick="Screenplay.save()" class="px-3 py-1.5 rounded text-sm font-medium bg-babylon-600 hover:bg-babylon-500 text-white transition-colors">
+        Save
+      </button>
+    </div>
+
+    <div class="flex items-center gap-1 text-xs text-gray-500">
+      <kbd class="px-1.5 py-0.5 bg-gray-800 rounded border border-gray-700">&larr;&rarr;</kbd> nav
+      <kbd class="px-1.5 py-0.5 bg-gray-800 rounded border border-gray-700 ml-1">Ctrl+E</kbd> edit
+    </div>
+  </div>
+
+  <!-- AI Revision bar (hidden by default, shown in edit mode) -->
+  <div id="sp-ai-bar" class="hidden mb-4 p-3 bg-gray-800/60 rounded-lg border border-gray-700 max-w-4xl mx-auto">
+    <label class="text-xs text-gray-500 uppercase mb-1.5 block">AI Director</label>
+    <div class="flex gap-2">
+      <input type="text" id="sp-ai-instruction"
+             placeholder='e.g., "remove politically incorrect language", "make dialogue more period-appropriate"'
+             class="flex-1 bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-1 focus:ring-purple-500" />
+      <button onclick="Screenplay.aiRevise()" id="sp-ai-btn"
+              class="px-4 py-2 rounded text-xs font-medium bg-purple-700 hover:bg-purple-600 text-white transition-colors whitespace-nowrap">
+        &#9889; Revise
+      </button>
+    </div>
+    <div class="text-xs text-gray-600 mt-1.5">Describe changes in plain language. Review result before saving.</div>
+  </div>
+
+  <!-- Screenplay content (view mode) -->
+  <div id="sp-content" class="screenplay-container bg-gray-900 border border-gray-800 rounded-lg p-8 min-h-[60vh] max-w-4xl mx-auto">
+    <div class="text-gray-600 text-center py-20">Select a chapter to view its screenplay</div>
+  </div>
+
+  <!-- Screenplay editor (edit mode, hidden by default) -->
+  <div id="sp-editor-wrap" class="hidden max-w-4xl mx-auto">
+    <textarea id="sp-editor"
+              class="w-full bg-gray-900 border border-gray-800 rounded-lg p-8 min-h-[60vh] font-mono text-sm text-gray-300 leading-relaxed resize-y focus:outline-none focus:ring-1 focus:ring-babylon-500"
+              spellcheck="true"></textarea>
+    <div class="flex justify-between items-center mt-2 text-xs text-gray-600">
+      <span id="sp-char-count"></span>
+      <span id="sp-dirty-indicator" class="hidden text-yellow-500">Unsaved changes</span>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/screenplay.js') }}"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => Screenplay.init('{{ slug }}'));
+</script>
+{% endblock %}

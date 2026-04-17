@@ -22,7 +22,7 @@ from apis.cartwheel import CartwheelClient
 class MeshStage:
     """
     Generates 3D assets from approved manifest batches.
-    Gate: audio_to_assets must be approved.
+    Gate: sound_to_assets must be approved.
     """
 
     def __init__(self, project: Project):
@@ -33,18 +33,23 @@ class MeshStage:
     def run(
         self,
         batch_id: Optional[str] = None,
-        dry_run: bool = False
+        dry_run: bool = False,
+        progress_callback=None
     ) -> dict:
         """
         Run one batch or all approved pending batches.
         If batch_id is None, runs next pending batch only
         (safest — review after each batch).
         """
-        print(f"\n{'─'*55}")
-        print(f"  STAGE: Mesh Generation")
-        print(f"{'─'*55}")
+        def _progress(pct, msg, cost=0.0):
+            if progress_callback:
+                progress_callback(pct, msg, cost)
 
-        self.costs.check_api_allowed("meshy", required_gate="audio_to_assets")
+        print(f"\n{'-'*55}")
+        print(f"  STAGE: Mesh Generation")
+        print(f"{'-'*55}")
+
+        _progress(5, "Loading manifest...")
 
         manifest = self.project.load_asset_manifest()
 
@@ -82,9 +87,13 @@ class MeshStage:
 
         if dry_run:
             print("  DRY RUN")
+            _progress(100, "Dry run complete", batch_est)
             return {"status": "dry_run", "estimated": batch_est}
 
+        # Gate + budget checks only when actually spending money
+        self.costs.check_api_allowed("meshy", required_gate="sound_to_assets")
         self.costs.check_budget("meshy", batch_est)
+        _progress(20, f"Generating batch: {batch['batch_id']}...")
 
         with MeshyClient() as meshy:
             result = meshy.process_manifest_batch(
@@ -105,19 +114,24 @@ class MeshStage:
         # Save updated manifest
         self.project.save_asset_manifest(manifest)
 
-        self.git.create_stage_branch("meshes", batch["batch_id"])
-        self.git.commit_stage_artifacts(
-            "meshes", batch["batch_id"],
-            f"meshes: batch {batch['batch_id']} — "
-            f"{result['completed']}/{len(batch['asset_ids'])} assets"
-        )
+        try:
+            self.git.create_stage_branch("meshes", batch["batch_id"])
+            self.git.commit_stage_artifacts(
+                "meshes", batch["batch_id"],
+                f"meshes: batch {batch['batch_id']} — "
+                f"{result['completed']}/{len(batch['asset_ids'])} assets"
+            )
+        except (RuntimeError, Exception) as e:
+            print(f"  [WARN] Git skipped: {e}")
 
-        print(f"\n  ✓ Batch complete: {result['completed']} assets, "
+        self.project.set_pipeline_stage("mesh_generation")
+        print(f"\n  [OK] Batch complete: {result['completed']} assets, "
               f"${result['cost_usd']:.2f} spent")
 
         if result["completed"] < len(batch["asset_ids"]):
-            print(f"  ⚠️  Some assets failed — check manifest for status=failed entries")
+            print(f"  WARNING: Some assets failed — check manifest for status=failed entries")
 
+        _progress(100, f"Mesh batch complete: {result['completed']} assets")
         return result
 
     def run_background_characters(
@@ -128,11 +142,11 @@ class MeshStage:
         Generate mesh + animations for all background character types
         using Meshy's combined pipeline.
         """
-        print(f"\n{'─'*55}")
+        print(f"\n{'-'*55}")
         print(f"  STAGE: Background Character Generation")
-        print(f"{'─'*55}")
+        print(f"{'-'*55}")
 
-        self.costs.check_api_allowed("meshy", required_gate="audio_to_assets")
+        self.costs.check_api_allowed("meshy", required_gate="sound_to_assets")
 
         bg_index = self.project.load_background_types()
         if not bg_index:
@@ -151,7 +165,7 @@ class MeshStage:
                         bg_types_path / f"{type_id}.json"
                     )
                 except FileNotFoundError:
-                    print(f"  ✗ Schema not found: {type_id}")
+                    print(f"  [FAIL] Schema not found: {type_id}")
                     continue
 
                 # Build motion prompts from behavior list
@@ -180,14 +194,17 @@ class MeshStage:
                 results.append(result)
 
         if not dry_run:
-            self.git.create_stage_branch("meshes", "background_characters")
-            self.git.commit_stage_artifacts(
-                "meshes", "background_characters",
-                f"meshes: {len(results)} background character types generated"
-            )
+            try:
+                self.git.create_stage_branch("meshes", "background_characters")
+                self.git.commit_stage_artifacts(
+                    "meshes", "background_characters",
+                    f"meshes: {len(results)} background character types generated"
+                )
+            except (RuntimeError, Exception) as e:
+                print(f"  [WARN] Git skipped: {e}")
 
         done = sum(1 for r in results if r.get("status") == "completed")
-        print(f"\n  ✓ {done}/{len(results)} background character types complete — ${total_cost:.2f}")
+        print(f"\n  [OK] {done}/{len(results)} background character types complete — ${total_cost:.2f}")
         return {"status": "complete", "generated": done, "cost_usd": total_cost}
 
     def _estimate_without_client(self, manifest: dict) -> dict:
@@ -231,17 +248,22 @@ class AnimationStage:
         self,
         character_id: Optional[str] = None,
         chapter_id: Optional[str] = None,
-        dry_run: bool = False
+        dry_run: bool = False,
+        progress_callback=None
     ) -> dict:
         """
         Generate motion library for one character or all named characters.
         Scans shots to determine what motions are needed.
         """
-        print(f"\n{'─'*55}")
-        print(f"  STAGE: Character Animation (Cartwheel)")
-        print(f"{'─'*55}")
+        def _progress(pct, msg, cost=0.0):
+            if progress_callback:
+                progress_callback(pct, msg, cost)
 
-        self.costs.check_api_allowed("cartwheel", required_gate="audio_to_assets")
+        print(f"\n{'-'*55}")
+        print(f"  STAGE: Character Animation (Cartwheel)")
+        print(f"{'-'*55}")
+
+        _progress(5, "Gathering characters...")
 
         # Gather characters to process
         if character_id:
@@ -253,6 +275,15 @@ class AnimationStage:
         # Gather shots to scan
         all_shots = self._gather_shots(chapter_id)
         print(f"  Scanning {len(all_shots)} shots for animation requirements")
+        _progress(10, f"Scanning {len(all_shots)} shots for animation requirements")
+
+        if dry_run:
+            print("  DRY RUN -- skipping Cartwheel API calls")
+            _progress(100, f"Dry run complete: {len(char_ids)} characters, {len(all_shots)} shots scanned")
+            return {"status": "dry_run", "characters": len(char_ids), "shots_scanned": len(all_shots)}
+
+        # Gate check only when actually spending money
+        self.costs.check_api_allowed("cartwheel", required_gate="sound_to_assets")
 
         results = []
         total_cost = 0.0
@@ -262,22 +293,26 @@ class AnimationStage:
                 try:
                     character = self.project.load_character(cid)
                 except FileNotFoundError:
-                    print(f"  ✗ Character not found: {cid}")
+                    print(f"  [FAIL] Character not found: {cid}")
                     continue
 
                 if not character.get("animation", {}).get("cartwheel", {}).get("api_enabled"):
-                    print(f"  ⏭ Cartwheel disabled for {cid}")
+                    print(f"  [SKIP] Cartwheel disabled for {cid}")
                     continue
 
                 # Extract what motions this character needs
                 requirements = cartwheel.extract_shot_requirements(cid, all_shots)
                 if not requirements:
-                    print(f"  ℹ No shots found for {cid}")
+                    print(f"  [INFO] No shots found for {cid}")
                     continue
 
                 output_dir = str(
                     self.project._path("animation", "characters", cid, "cartwheel")
                 )
+
+                char_idx = char_ids.index(cid)
+                char_pct = 15 + int((char_idx / max(len(char_ids), 1)) * 70)
+                _progress(char_pct, f"Generating motions for {cid}...")
 
                 result = cartwheel.build_character_motion_library(
                     character=character,
@@ -297,7 +332,7 @@ class AnimationStage:
                     notes_path = Path(output_dir) / "ue5_import_notes.txt"
                     notes = cartwheel.get_ue5_import_notes(character)
                     notes_path.write_text(notes)
-                    print(f"  ↳ UE5 import notes saved")
+                    print(f"    -> UE5 import notes saved")
 
                     # Update character schema with motion index ref
                     character["animation"]["cartwheel"]["motion_index_ref"] = \
@@ -307,14 +342,19 @@ class AnimationStage:
                 results.append(result)
 
         if not dry_run and results:
-            self.git.create_stage_branch("animation", chapter_id or "all")
-            self.git.commit_stage_artifacts(
-                "animation", chapter_id or "all",
-                f"animation: Cartwheel motions for {len(results)} characters"
-            )
+            try:
+                self.git.create_stage_branch("animation", chapter_id or "all")
+                self.git.commit_stage_artifacts(
+                    "animation", chapter_id or "all",
+                    f"animation: Cartwheel motions for {len(results)} characters"
+                )
+            except (RuntimeError, Exception) as e:
+                print(f"  [WARN] Git skipped: {e}")
 
+        self.project.set_pipeline_stage("animation")
         done = sum(1 for r in results if r.get("status") == "completed")
-        print(f"\n  ✓ {done}/{len(results)} characters animated — ${total_cost:.2f}")
+        print(f"\n  [OK] {done}/{len(results)} characters animated — ${total_cost:.2f}")
+        _progress(100, f"Animation complete: {done} characters", total_cost)
         return {"status": "complete", "characters": done, "cost_usd": total_cost}
 
     def print_ue5_notes(self, character_id: str):

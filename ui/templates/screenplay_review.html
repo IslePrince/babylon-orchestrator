@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Screenplay Review — Babylon Studio{% endblock %}
+
+{% block content %}
+<div id="review-root">
+
+  <!-- Controls bar -->
+  <div class="flex items-center gap-4 mb-4 flex-wrap">
+    <h2 class="text-lg font-semibold text-gray-100">Screenplay Review</h2>
+
+    <select id="rv-chapter-select"
+            onchange="ScreenplayReview.load()"
+            class="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm text-gray-200 focus:outline-none focus:ring-1 focus:ring-babylon-500">
+      <option value="">Select chapter...</option>
+    </select>
+
+    <div class="flex-1"></div>
+
+    <button onclick="ScreenplayReview.playAll()"
+            class="bg-babylon-700 hover:bg-babylon-600 text-white text-sm px-4 py-1.5 rounded transition-colors flex items-center gap-1">
+      &#9654; Play All
+    </button>
+    <button onclick="ScreenplayReview.stopAll()"
+            class="bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm px-3 py-1.5 rounded transition-colors">
+      &#9632; Stop
+    </button>
+
+    <div class="flex items-center gap-1 text-xs text-gray-500">
+      <kbd class="px-1.5 py-0.5 bg-gray-800 rounded border border-gray-700">&uarr;&darr;</kbd> nav
+      <kbd class="px-1.5 py-0.5 bg-gray-800 rounded border border-gray-700 ml-2">Space</kbd> play
+    </div>
+  </div>
+
+  <!-- Summary stats bar -->
+  <div id="rv-stats-bar" class="flex items-center gap-6 px-4 py-2.5 mb-4 bg-gray-900/60 rounded-lg border border-gray-800">
+    <div class="text-xs text-gray-400">
+      <span class="text-gray-200 font-medium" id="rv-stat-recorded">0</span>/<span id="rv-stat-total">0</span> lines recorded
+    </div>
+    <div class="text-xs text-gray-400">
+      Total duration: <span class="text-gray-200 font-medium" id="rv-stat-duration">0:00</span>
+    </div>
+    <div id="rv-unrecorded-warning" class="hidden text-xs text-amber-400 flex items-center gap-1">
+      <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.168 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg>
+      <span id="rv-unrecorded-text"></span>
+    </div>
+  </div>
+
+  <!-- Screenplay content with audio -->
+  <div id="rv-content" class="bg-gray-900 rounded-lg border border-gray-800 p-6 max-w-4xl mx-auto"
+       style="font-family: 'Courier New', monospace;">
+    <div class="text-gray-600 text-center py-20">Select a chapter to review</div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/screenplay_review.js') }}"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => ScreenplayReview.init('{{ slug }}'));
+</script>
+{% endblock %}

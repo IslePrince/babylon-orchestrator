@@ -48,6 +48,9 @@ class Project:
     def load_world_bible(self) -> dict:
         return self._load(self._path("world", "world_bible.json"))
 
+    def save_world_bible(self, data: dict):
+        self._save(self._path("world", "world_bible.json"), data)
+
     def load_character_index(self) -> dict:
         return self._load(self._path("characters", "_index.json"))
 
@@ -75,6 +78,9 @@ class Project:
     def load_cost_ledger(self) -> dict:
         return self._load(self._path("costs", "ledger.json"))
 
+    def load_recordings(self, chapter_id: str) -> dict:
+        return self._load(self._path("audio", chapter_id, "recordings.json"))
+
     def load_background_types(self) -> dict:
         index_path = self._path("characters", "background_types", "_index.json")
         if not index_path.exists():
@@ -97,6 +103,9 @@ class Project:
     def save_shot(self, chapter_id: str, scene_id: str, shot_id: str, data: dict):
         self._save(self._path("chapters", chapter_id, "shots", shot_id, "shot.json"), data)
 
+    def save_shot_index(self, chapter_id: str, data: dict):
+        self._save(self._path("chapters", chapter_id, "shots", "_index.json"), data)
+
     def save_asset_manifest(self, data: dict):
         self._save(self._path("assets", "manifest.json"), data)
 
@@ -105,6 +114,9 @@ class Project:
 
     def save_character(self, character_id: str, data: dict):
         self._save(self._path("characters", character_id, "character.json"), data)
+
+    def save_recordings(self, chapter_id: str, data: dict):
+        self._save(self._path("audio", chapter_id, "recordings.json"), data)
 
     # ------------------------------------------------------------------
     # Notes writers (versioned markdown)
@@ -138,35 +150,53 @@ class Project:
         self.save_project()
 
     def get_all_chapter_ids(self) -> list:
-        index = self.load_chapter_index()
-        return [c["chapter_id"] for c in index.get("chapters", [])]
+        try:
+            index = self.load_chapter_index()
+            return [c["chapter_id"] for c in index.get("chapters", [])]
+        except FileNotFoundError:
+            return []
 
     def get_all_character_ids(self, tier: str = "all") -> list:
-        index = self.load_character_index()
+        try:
+            index = self.load_character_index()
+        except FileNotFoundError:
+            return []
+        chars = index.get("characters", [])
         if tier == "primary":
-            return [c["character_id"] for c in index["characters"] if c["status"] == "primary"]
+            return [c["character_id"] for c in chars if c.get("status") == "primary"]
         if tier == "secondary":
-            return [c["character_id"] for c in index["characters"] if c["status"] == "secondary"]
-        return [c["character_id"] for c in index["characters"]]
+            return [c["character_id"] for c in chars if c.get("status") == "secondary"]
+        return [c["character_id"] for c in chars]
 
     def get_shots_for_scene(self, chapter_id: str, scene_id: str) -> list:
         index = self.load_shot_index(chapter_id, scene_id)
         return index.get("shots", [])
 
     def get_world_version(self) -> str:
-        wb = self.load_world_bible()
-        history = wb.get("version_history", [])
-        if history:
-            return history[-1]["version"]
+        try:
+            wb = self.load_world_bible()
+            history = wb.get("version_history", [])
+            if history:
+                return history[-1]["version"]
+        except FileNotFoundError:
+            pass
         return "1.0"
 
     def is_gate_open(self, gate_name: str) -> bool:
         """
         Gates are open when human_approval has been recorded.
-        We store approvals in project.json under pipeline.gate_approvals.
+        Check both inline gate config and the separate gate_approvals dict.
         """
+        # Check inline gate config first
+        gate_cfg = self.data["pipeline"].get("gates", {}).get(gate_name, {})
+        if gate_cfg.get("approved", False):
+            return True
+        # Check gate_approvals dict
         approvals = self.data["pipeline"].get("gate_approvals", {})
-        return approvals.get(gate_name, False)
+        approval = approvals.get(gate_name, {})
+        if isinstance(approval, dict):
+            return approval.get("approved", False)
+        return bool(approval)
 
     def approve_gate(self, gate_name: str, approver: str = "director"):
         if "gate_approvals" not in self.data["pipeline"]:
@@ -177,7 +207,7 @@ class Project:
             "timestamp": datetime.now().isoformat()
         }
         self.save_project()
-        print(f"  ✓ Gate '{gate_name}' approved by {approver}")
+        print(f"  [OK] Gate '{gate_name}' approved by {approver}")
 
     def get_api_config(self, api_name: str) -> dict:
         return self.data["apis"].get(api_name, {})
@@ -189,8 +219,8 @@ class Project:
     def get_budget_remaining(self, api_name: str) -> float:
         ledger = self.load_cost_ledger()
         cfg = self.get_api_config(api_name)
-        budget = cfg.get("budget_limit_usd", 0.0)
-        spent = ledger["by_api"].get(api_name, {}).get("spent", 0.0)
+        budget = cfg.get("budget_limit_usd") or cfg.get("budget_usd", 0.0)
+        spent = ledger.get("by_api", {}).get(api_name, {}).get("spent", 0.0)
         return round(budget - spent, 4)
 
     def __repr__(self):

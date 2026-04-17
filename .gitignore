@@ -42,3 +42,9 @@ temp/
 .DS_Store
 .AppleDouble
 .LSOverride
+
+# Runtime logs (stage execution output)
+logs/
+
+# Claude Code dev-local (preview-browser launch config)
+.claude/

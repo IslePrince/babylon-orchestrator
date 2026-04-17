@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Assets — Babylon Studio{% endblock %}
+
+{% block content %}
+<div id="assets-root">
+
+  <div class="flex items-center justify-between mb-6">
+    <h2 class="text-lg font-semibold text-gray-100">Asset Manifest</h2>
+    <div class="flex items-center gap-3">
+      <span id="asset-count" class="text-xs text-gray-500"></span>
+      <button onclick="Assets.batchApproveAll()"
+              class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded transition-colors">
+        Approve All Pending
+      </button>
+      <button onclick="Assets.runMeshBatch()"
+              class="px-3 py-1.5 bg-babylon-600 hover:bg-babylon-500 text-white text-xs rounded transition-colors">
+        Run Next Batch
+      </button>
+    </div>
+  </div>
+
+  <!-- Category tabs -->
+  <div class="flex gap-1 mb-4 border-b border-gray-800">
+    <button onclick="Assets.switchTab('environments')" class="asset-tab active" data-tab="environments">Environments</button>
+    <button onclick="Assets.switchTab('props')" class="asset-tab" data-tab="props">Props</button>
+    <button onclick="Assets.switchTab('costumes')" class="asset-tab" data-tab="costumes">Costumes</button>
+    <button onclick="Assets.switchTab('vegetation')" class="asset-tab" data-tab="vegetation">Vegetation</button>
+    <button onclick="Assets.switchTab('background_characters')" class="asset-tab" data-tab="background_characters">BG Characters</button>
+  </div>
+
+  <!-- Asset grid -->
+  <div id="asset-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+    <div class="skeleton h-24 w-full"></div>
+    <div class="skeleton h-24 w-full"></div>
+    <div class="skeleton h-24 w-full"></div>
+  </div>
+
+  <!-- Generation batches -->
+  <div class="mt-8">
+    <h3 class="text-sm font-semibold text-gray-300 mb-3">Generation Batches</h3>
+    <div id="batch-list"></div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<style>
+  .asset-tab {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.75rem;
+    color: #9ca3af;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    cursor: pointer;
+    background: none;
+  }
+  .asset-tab:hover { color: #e5e7eb; }
+  .asset-tab.active {
+    color: #f6b86d;
+    border-bottom-color: #ee7a12;
+  }
+</style>
+<script src="{{ url_for('static', filename='js/assets.js') }}"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => Assets.init('{{ slug }}'));
+</script>
+{% endblock %}

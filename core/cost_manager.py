@@ -67,9 +67,17 @@ class CostManager:
         output_cost = (output_tokens / 1_000_000) * 15.00
         return round(input_cost + output_cost, 6)
 
-    def estimate_stability(self, image_count: int = 1) -> float:
-        """Stability AI ~$0.04 per image."""
+    def estimate_imagen(self, image_count: int = 1) -> float:
+        """Google Imagen 4.0 ~$0.04 per image."""
         return round(image_count * 0.04, 4)
+
+    def estimate_stability(self, image_count: int = 1) -> float:
+        """Stability SD3 Large Turbo ~4 credits = ~$0.04 per image."""
+        return round(image_count * 0.04, 4)
+
+    def estimate_comfyui(self, image_count: int = 1) -> float:
+        """ComfyUI local generation — always free."""
+        return 0.0
 
     # ------------------------------------------------------------------
     # Transaction recording
@@ -88,6 +96,11 @@ class CostManager:
         Updates totals in project.json and ledger.json.
         """
         ledger = self.project.load_cost_ledger()
+        ledger.setdefault("by_api", {})
+        ledger.setdefault("by_stage", {})
+        ledger.setdefault("by_chapter", {})
+        ledger.setdefault("transactions", [])
+        ledger.setdefault("totals", {"total": 0.0})
 
         # Build transaction record
         tx = {
@@ -107,6 +120,11 @@ class CostManager:
             ledger["by_api"][api_name]["spent"] + cost_usd, 6
         )
 
+        # Update per-api total in totals dict
+        ledger["totals"][api_name] = round(
+            ledger["totals"].get(api_name, 0.0) + cost_usd, 6
+        )
+
         # Update by_stage totals
         if stage not in ledger["by_stage"]:
             ledger["by_stage"][stage] = {"spent": 0.00}
@@ -115,7 +133,11 @@ class CostManager:
         )
 
         # Update grand total
-        ledger["total_spent_usd"] = round(ledger["total_spent_usd"] + cost_usd, 6)
+        ledger["totals"]["total"] = round(
+            ledger["totals"].get("total", 0.0) + cost_usd, 6
+        )
+
+        ledger["last_updated"] = datetime.now().isoformat()
 
         self.project.save_cost_ledger(ledger)
 
@@ -135,7 +157,7 @@ class CostManager:
             except FileNotFoundError:
                 pass
 
-        print(f"  💰 Recorded ${cost_usd:.4f} [{api_name}] — {description}")
+        print(f"  $ Recorded ${cost_usd:.4f} [{api_name}] -- {description}")
 
     # ------------------------------------------------------------------
     # Reporting
@@ -143,25 +165,32 @@ class CostManager:
 
     def print_summary(self):
         ledger = self.project.load_cost_ledger()
-        total = ledger["total_spent_usd"]
-        budget = ledger["total_budget_usd"]
+        totals = ledger.get("totals", {})
+        total = totals.get("total", 0.0)
+        # Sum all API budgets for total budget
+        budget = sum(
+            (self.project.get_api_config(api).get("budget_limit_usd")
+             or self.project.get_api_config(api).get("budget_usd", 0))
+            for api in ["claude", "elevenlabs", "meshy", "cartwheel", "google_imagen", "stabilityai", "comfyui"]
+        )
         pct = (total / budget * 100) if budget > 0 else 0
 
-        print("\n┌─────────────────────────────────────────┐")
-        print(f"│  Cost Summary — {self.project.id:<24} │")
-        print("├─────────────────────────────────────────┤")
-        print(f"│  Total Spent:  ${total:>8.2f} / ${budget:.2f}  ({pct:.1f}%)  │")
-        print("├──────────────────┬──────────┬───────────┤")
-        print("│  API             │  Spent   │  Remaining│")
-        print("├──────────────────┼──────────┼───────────┤")
+        print("\n+------------------------------------------+")
+        print(f"|  Cost Summary — {self.project.id:<24} |")
+        print("+------------------------------------------+")
+        print(f"|  Total Spent:  ${total:>8.2f} / ${budget:.2f}  ({pct:.1f}%)  |")
+        print("+------------------+----------+-----------+")
+        print("|  API             |  Spent   |  Remaining|")
+        print("+------------------+----------+-----------+")
 
         for api, data in ledger["by_api"].items():
             spent = data["spent"]
-            budget_api = self.project.get_api_config(api).get("budget_limit_usd", 0)
+            api_cfg = self.project.get_api_config(api)
+            budget_api = api_cfg.get("budget_limit_usd") or api_cfg.get("budget_usd", 0)
             remaining = round(budget_api - spent, 2)
-            print(f"│  {api:<16}│ ${spent:>7.2f} │ ${remaining:>8.2f}│")
+            print(f"|  {api:<16}| ${spent:>7.2f} | ${remaining:>8.2f}|")
 
-        print("└──────────────────┴──────────┴───────────┘")
+        print("+------------------+----------+-----------+")
 
     def print_stage_summary(self):
         ledger = self.project.load_cost_ledger()

@@ -6,7 +6,7 @@ Read this before making any changes.
 ## What This Is
 
 A Python orchestrator that drives AI-assisted film production through a staged
-pipeline. It coordinates Claude, ElevenLabs, Meshy, Cartwheel, and Stability AI
+pipeline. It coordinates Claude, ElevenLabs, Meshy, Cartwheel, and Google Imagen
 to take a literary source text from ingest through UE5 scene assembly.
 
 The orchestrator is a TOOL. It operates on PROJECT FOLDERS which are separate
@@ -28,7 +28,7 @@ babylon-orchestrator/
 │   ├── elevenlabs.py        Voice generation
 │   ├── meshy.py             Mesh + animation (background chars)
 │   ├── cartwheel.py         Named character animation
-│   └── stability.py         Storyboard images
+│   └── google_imagen.py     Storyboard images (Google Imagen 3)
 ├── stages/                  Pipeline stage orchestrators
 │   ├── pipeline.py          Ingest → screenplay → cine → storyboard → audio → assets
 │   └── mesh_animation.py    Mesh batches + Cartwheel motion libraries
@@ -58,7 +58,7 @@ cost_manager.check_budget() first. Never call an API client directly from a
 route handler or stage without these checks.
 
 ### Gates are sacred
-The gate system (storyboard_to_audio, audio_to_assets, etc.) prevents
+The gate system (screenplay_to_voice_recording, cut_to_sound, sound_to_assets, etc.) prevents
 unintended spending. Never call check_api_allowed() with a gate parameter
 set to None unless the stage genuinely has no gate. When in doubt, add a gate.
 

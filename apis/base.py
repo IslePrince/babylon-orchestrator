@@ -7,10 +7,13 @@ Handles retries, rate limiting, timeout, and error reporting.
 import time
 import os
 import httpx
+from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv
 
-load_dotenv()
+# Resolve .env relative to this file's parent (orchestrator root)
+_env_path = Path(__file__).resolve().parent.parent / ".env"
+load_dotenv(_env_path, override=True)
 
 
 class APIError(Exception):
@@ -63,7 +66,7 @@ class BaseAPIClient:
 
                 if response.status_code == 429:
                     wait = retry_delay * (2 ** attempt)
-                    print(f"  ⏳ Rate limited by {self.API_NAME}, waiting {wait}s...")
+                    print(f"  [WAIT] Rate limited by {self.API_NAME}, waiting {wait}s...")
                     time.sleep(wait)
                     continue
 
@@ -73,6 +76,17 @@ class BaseAPIClient:
                         continue
                     raise APIError(self.API_NAME, response.status_code, response.text[:200])
 
+                # Cloudflare challenge: 403 with HTML body
+                if response.status_code == 403:
+                    body = response.text[:500]
+                    if "cloudflare" in body.lower() or "just a moment" in body.lower() or "<!DOCTYPE" in body:
+                        if attempt < retries - 1:
+                            wait = retry_delay * (2 ** attempt)
+                            print(f"  [RETRY] {self.API_NAME} Cloudflare challenge, waiting {wait:.0f}s...")
+                            time.sleep(wait)
+                            continue
+                        raise APIError(self.API_NAME, 403, "Cloudflare challenge persists after retries")
+
                 if response.status_code >= 400:
                     raise APIError(self.API_NAME, response.status_code, response.text[:200])
 
@@ -80,7 +94,7 @@ class BaseAPIClient:
 
             except httpx.TimeoutException:
                 if attempt < retries - 1:
-                    print(f"  ⏳ Timeout on {self.API_NAME}, retrying...")
+                    print(f"  [WAIT] Timeout on {self.API_NAME}, retrying...")
                     time.sleep(retry_delay)
                     continue
                 raise APIError(self.API_NAME, 0, "Request timed out after all retries")

@@ -25,11 +25,28 @@ from typing import Optional
 from .base import BaseAPIClient, APIError
 
 
+class ConfigurationError(Exception):
+    """Raised when Cartwheel API is not properly configured."""
+    pass
+
+
 class CartwheelClient(BaseAPIClient):
 
     API_NAME = "cartwheel"
     BASE_URL = "https://api.getcartwheel.com/v1"
     ENV_KEY = "CARTWHEEL_API_KEY"
+
+    def __init__(self):
+        import os
+        self.api_key = os.getenv(self.ENV_KEY, "")
+        if not self.api_key:
+            raise ConfigurationError(
+                "Cartwheel API key not set -- animation stage unavailable.\n"
+                "Set CARTWHEEL_API_KEY in your .env file to enable character animation.\n"
+                "Get a key at https://getcartwheel.com/"
+            )
+        import httpx
+        self.client = httpx.Client(timeout=120.0)
 
     POLL_INTERVAL = 10
     MAX_POLL_TIME = 300
@@ -80,7 +97,7 @@ class CartwheelClient(BaseAPIClient):
         if not job_id:
             raise APIError("cartwheel", 0, f"No job ID: {resp.text}")
 
-        print(f"    ↳ Cartwheel job: {job_id}")
+        print(f"    -> Cartwheel job: {job_id}")
         return job_id
 
     def get_motion_status(self, job_id: str) -> dict:
@@ -96,7 +113,7 @@ class CartwheelClient(BaseAPIClient):
             print(f"    {tag} {status}    ", end="\r")
 
             if status in ("completed", "succeeded", "done"):
-                print(f"    ✓{tag} motion complete   ")
+                print(f"    [OK]{tag} motion complete   ")
                 return data
             if status in ("failed", "error"):
                 raise APIError("cartwheel", 0, f"Motion failed: {data.get('error')}")
@@ -115,7 +132,7 @@ class CartwheelClient(BaseAPIClient):
         out.parent.mkdir(parents=True, exist_ok=True)
         with open(out, "wb") as f:
             f.write(resp.content)
-        print(f"      ↳ {out.name} saved ({len(resp.content):,} bytes)")
+        print(f"      -> {out.name} saved ({len(resp.content):,} bytes)")
         return str(out)
 
     def generate_motion(
@@ -225,7 +242,7 @@ class CartwheelClient(BaseAPIClient):
                 total_cost += self.COST_PER_CLIP
 
             except APIError as e:
-                print(f"  ✗ {motion_id}: {e}")
+                print(f"  [FAIL] {motion_id}: {e}")
                 results[motion_id] = None
 
         # Save motion index
@@ -240,7 +257,7 @@ class CartwheelClient(BaseAPIClient):
             }, f, indent=2)
 
         success = sum(1 for v in results.values() if v)
-        print(f"\n  ✓ {char_name}: {success}/{len(unique_motions)} clips generated — ${total_cost:.2f}")
+        print(f"\n  [OK] {char_name}: {success}/{len(unique_motions)} clips generated -- ${total_cost:.2f}")
         return {
             "character_id": char_id,
             "status": "completed",
@@ -313,7 +330,7 @@ class CartwheelClient(BaseAPIClient):
         mh_id = character.get("animation", {}).get("unreal", {}).get("metahuman_id", "")
 
         return f"""
-UE5 Cartwheel Import Instructions — {char_name}
+UE5 Cartwheel Import Instructions -- {char_name}
 {'='*50}
 
 1. Import FBX animations:
@@ -342,6 +359,6 @@ UE5 Cartwheel Import Instructions — {char_name}
 
 Notes:
    - Cartwheel outputs at 30fps, UE5 project may need 24fps
-   - Check foot IK after retargeting — ground contact may need adjustment
+   - Check foot IK after retargeting -- ground contact may need adjustment
    - Motion clips are generated per-shot duration, extend via loop if needed
 """

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Voice Casting — Babylon Studio{% endblock %}
+
+{% block content %}
+<div id="voices-root">
+
+  <div class="flex items-center justify-between mb-6">
+    <h2 class="text-lg font-semibold text-gray-100">Voice Casting</h2>
+    <span id="voice-cast-count" class="text-xs text-gray-500"></span>
+  </div>
+
+  <!-- Two-column layout: character list + detail panel -->
+  <div class="flex gap-6">
+
+    <!-- Character list -->
+    <div class="w-64 flex-shrink-0">
+      <div id="voice-character-list" class="space-y-1">
+        <div class="skeleton h-8 w-full"></div>
+        <div class="skeleton h-8 w-full"></div>
+        <div class="skeleton h-8 w-full"></div>
+      </div>
+    </div>
+
+    <!-- Detail panel -->
+    <div class="flex-1 min-w-0">
+      <div id="voice-detail" class="card p-4">
+        <div class="text-gray-600 text-sm">Select a character to manage voice casting.</div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/voices.js') }}"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => Voices.init('{{ slug }}'));
+</script>
+{% endblock %}

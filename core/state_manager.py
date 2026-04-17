@@ -26,18 +26,32 @@ class StateManager:
         for cid in chapter_ids:
             try:
                 chapter = self.project.load_chapter(cid)
+                production = chapter.get("production", {})
+                # Supplement total_shots from shot index if chapter JSON is stale
+                if not production.get("total_shots"):
+                    try:
+                        index = self.project.load_shot_index(cid, "")
+                        production["total_shots"] = len(index.get("shots", []))
+                    except FileNotFoundError:
+                        pass
                 chapters.append({
                     "chapter_id": cid,
-                    "title": chapter["title"],
-                    "status": chapter["status"],
-                    "production": chapter["production"],
-                    "costs": chapter["costs"],
-                    "approved": chapter["meta"]["approved"]
+                    "title": chapter.get("title", cid),
+                    "status": chapter.get("status", "pending"),
+                    "production": production,
+                    "costs": chapter.get("costs", {}),
+                    "approved": chapter.get("meta", {}).get("approved", False)
                 })
             except FileNotFoundError:
                 chapters.append({
                     "chapter_id": cid,
                     "status": "schema_missing",
+                    "production": {}
+                })
+            except Exception:
+                chapters.append({
+                    "chapter_id": cid,
+                    "status": "error",
                     "production": {}
                 })
 
@@ -46,7 +60,8 @@ class StateManager:
             "pipeline_stage": self.project.get_pipeline_stage(),
             "chapters": chapters,
             "gates": self._get_gate_status(),
-            "world_version": self.project.get_world_version()
+            "world_version": self.project.get_world_version(),
+            "voice_casting": self._get_voice_casting_summary()
         }
 
     def _get_gate_status(self) -> dict:
@@ -54,41 +69,133 @@ class StateManager:
         approvals = self.project.data["pipeline"].get("gate_approvals", {})
         result = {}
         for gate_name, gate_cfg in gates.items():
+            approval = approvals.get(gate_name, {})
             result[gate_name] = {
-                "requires": gate_cfg["requires"],
-                "approved": gate_name in approvals and approvals[gate_name].get("approved", False),
-                "approver": approvals.get(gate_name, {}).get("approver"),
-                "timestamp": approvals.get(gate_name, {}).get("timestamp")
+                "description": gate_cfg.get("description", ""),
+                "approved": (
+                    gate_cfg.get("approved", False)
+                    or (isinstance(approval, dict) and approval.get("approved", False))
+                ),
+                "approver": (
+                    gate_cfg.get("approved_by")
+                    or (approval.get("approver") if isinstance(approval, dict) else None)
+                ),
+                "timestamp": (
+                    gate_cfg.get("approved_at")
+                    or (approval.get("timestamp") if isinstance(approval, dict) else None)
+                ),
             }
+        return result
+
+    def _get_voice_casting_summary(self) -> list:
+        """Return voice assignment status for all characters."""
+        result = []
+        try:
+            char_ids = self.project.get_all_character_ids()
+            for cid in char_ids:
+                try:
+                    char = self.project.load_character(cid)
+                    voice = char.get("voice", {})
+                    has_voice = bool(
+                        voice.get("voice_id") or voice.get("elevenlabs_voice_id")
+                    )
+                    result.append({
+                        "character_id": cid,
+                        "display_name": char.get("display_name", cid),
+                        "has_voice": has_voice,
+                    })
+                except FileNotFoundError:
+                    pass
+        except Exception:
+            pass
         return result
 
     def get_chapter_status(self, chapter_id: str) -> dict:
         """Detailed status for one chapter including all scenes and shots."""
         chapter = self.project.load_chapter(chapter_id)
-        scenes = []
+        scene_ids = self._get_scene_ids_for_chapter(chapter_id)
 
-        for scene_id in self._get_scene_ids_for_chapter(chapter_id):
-            try:
-                scene = self.project.load_scene(chapter_id, scene_id)
-                shot_summary = self._get_shot_summary(chapter_id, scene_id)
+        # Load shot index once (one index file per chapter covers all scenes)
+        try:
+            index = self.project.load_shot_index(chapter_id, "")
+            all_shots = index.get("shots", [])
+        except FileNotFoundError:
+            all_shots = []
+
+        scenes = []
+        for scene_id in scene_ids:
+            # Filter shots belonging to this scene by shot_id prefix
+            scene_shots = [s for s in all_shots
+                           if s.get("shot_id", "").startswith(scene_id + "_")]
+            scenes.append({
+                "scene_id": scene_id,
+                "title": scene_id,
+                "status": {},
+                "dialogue_lines": sum(s.get("dialogue_lines", 0) for s in scene_shots),
+                "audio_generated": all(s.get("audio_approved", False) for s in scene_shots) if scene_shots else False,
+                "shots": {
+                    "total": len(scene_shots),
+                    "shot_ids": [s["shot_id"] for s in scene_shots],
+                    "shot_status": {
+                        s["shot_id"]: {
+                            "storyboard_approved": s.get("storyboard_approved", False),
+                            "audio_approved": s.get("audio_approved", False),
+                            "flags": s.get("flags", []),
+                        }
+                        for s in scene_shots
+                    },
+                    "storyboard_approved": sum(1 for s in scene_shots if s.get("storyboard_approved")),
+                    "audio_approved": sum(1 for s in scene_shots if s.get("audio_approved")),
+                    "built": sum(1 for s in scene_shots if s.get("built")),
+                    "preview_rendered": sum(1 for s in scene_shots if s.get("preview_rendered")),
+                    "final_rendered": sum(1 for s in scene_shots if s.get("final_rendered")),
+                    "flagged": [s["shot_id"] for s in scene_shots if s.get("flags")],
+                },
+            })
+
+        # If no scenes from chapter structure but shots exist, create a
+        # synthetic scene entry so the UI can still display shots
+        if not scenes and all_shots:
+            scene_id = all_shots[0].get("shot_id", "").rsplit("_", 1)[0]
+            # Group by scene_id prefix (first two underscore-separated parts)
+            scene_groups = {}
+            for s in all_shots:
+                sid = "_".join(s.get("shot_id", "").split("_")[:2])
+                scene_groups.setdefault(sid, []).append(s)
+            for sid, shots in scene_groups.items():
                 scenes.append({
-                    "scene_id": scene_id,
-                    "title": scene["title"],
-                    "status": scene["meta"],
-                    "dialogue_lines": scene["dialogue"]["line_count"],
-                    "audio_generated": scene["audio"]["generated"],
-                    "shots": shot_summary
+                    "scene_id": sid,
+                    "title": sid,
+                    "status": {},
+                    "dialogue_lines": sum(s.get("dialogue_lines", 0) for s in shots),
+                    "audio_generated": False,
+                    "shots": {
+                        "total": len(shots),
+                        "shot_ids": [s["shot_id"] for s in shots],
+                        "shot_status": {
+                            s["shot_id"]: {
+                                "storyboard_approved": s.get("storyboard_approved", False),
+                                "audio_approved": s.get("audio_approved", False),
+                                "flags": s.get("flags", []),
+                            }
+                            for s in shots
+                        },
+                        "storyboard_approved": sum(1 for s in shots if s.get("storyboard_approved")),
+                        "audio_approved": sum(1 for s in shots if s.get("audio_approved")),
+                        "built": sum(1 for s in shots if s.get("built")),
+                        "preview_rendered": sum(1 for s in shots if s.get("preview_rendered")),
+                        "final_rendered": sum(1 for s in shots if s.get("final_rendered")),
+                        "flagged": [s["shot_id"] for s in shots if s.get("flags")],
+                    },
                 })
-            except FileNotFoundError:
-                scenes.append({"scene_id": scene_id, "status": "missing"})
 
         return {
             "chapter_id": chapter_id,
-            "title": chapter["title"],
-            "status": chapter["status"],
-            "production": chapter["production"],
+            "title": chapter.get("title", chapter_id),
+            "status": chapter.get("status", "pending"),
+            "production": chapter.get("production", {}),
             "scenes": scenes,
-            "costs": chapter["costs"]
+            "costs": chapter.get("costs", {})
         }
 
     def _get_scene_ids_for_chapter(self, chapter_id: str) -> List[str]:
@@ -101,9 +208,16 @@ class StateManager:
     def _get_shot_summary(self, chapter_id: str, scene_id: str) -> dict:
         try:
             index = self.project.load_shot_index(chapter_id, scene_id)
-            shots = index.get("shots", [])
+            all_shots = index.get("shots", [])
+            # Filter to shots belonging to this scene (shot_id prefix match)
+            shots = [s for s in all_shots
+                     if s.get("shot_id", "").startswith(scene_id + "_")]
+            # If no matches, return all (single-scene chapter)
+            if not shots:
+                shots = all_shots
             return {
                 "total": len(shots),
+                "shot_ids": [s["shot_id"] for s in shots],
                 "storyboard_approved": sum(1 for s in shots if s.get("storyboard_approved")),
                 "audio_approved": sum(1 for s in shots if s.get("audio_approved")),
                 "built": sum(1 for s in shots if s.get("built")),
@@ -112,7 +226,7 @@ class StateManager:
                 "flagged": [s["shot_id"] for s in shots if s.get("flags")]
             }
         except FileNotFoundError:
-            return {"total": 0}
+            return {"total": 0, "shot_ids": []}
 
     # ------------------------------------------------------------------
     # Version drift detection
@@ -181,33 +295,30 @@ class StateManager:
                 pass
         return ready
 
-    def get_ready_for_audio(self) -> List[dict]:
+    def get_ready_for_voice_recording(self) -> List[dict]:
         """
-        Dialogue lines ready for ElevenLabs generation.
-        Gate: storyboard_to_audio must be approved.
+        Chapters with screenplay ready for voice recording.
+        Gate: screenplay_to_voice_recording must be approved.
         """
-        if not self.project.is_gate_open("storyboard_to_audio"):
+        if not self.project.is_gate_open("screenplay_to_voice_recording"):
             return []
 
         ready = []
         for chapter_id in self.project.get_all_chapter_ids():
-            for scene_id in self._get_scene_ids_for_chapter(chapter_id):
-                try:
-                    scene = self.project.load_scene(chapter_id, scene_id)
-                    if not scene["meta"].get("storyboard_approved"):
-                        continue
-                    for line in scene["dialogue"]["lines"]:
-                        if line["audio_status"] == "pending":
-                            ready.append({
-                                "chapter_id": chapter_id,
-                                "scene_id": scene_id,
-                                "line_id": line["line_id"],
-                                "character_id": line["character_id"],
-                                "text": line["text"],
-                                "audio_ref": line["audio_ref"]
-                            })
-                except FileNotFoundError:
-                    pass
+            screenplay_path = self.project._path("chapters", chapter_id, "screenplay.md")
+            if not screenplay_path.exists():
+                continue
+            # Check if recordings already exist
+            try:
+                recs = self.project.load_recordings(chapter_id)
+                if recs.get("recordings"):
+                    continue  # already recorded
+            except FileNotFoundError:
+                pass
+            ready.append({
+                "chapter_id": chapter_id,
+                "status": "screenplay_ready",
+            })
         return ready
 
     def get_ready_for_mesh_generation(self) -> List[dict]:
@@ -215,7 +326,7 @@ class StateManager:
         Assets approved for generation in the manifest.
         Gate: assets_to_scene must be approved.
         """
-        if not self.project.is_gate_open("audio_to_assets"):
+        if not self.project.is_gate_open("sound_to_assets"):
             return []
 
         manifest = self.project.load_asset_manifest()
@@ -241,9 +352,9 @@ class StateManager:
     def print_project_status(self):
         status = self.get_project_status()
         world_ver = status["world_version"]
-        print(f"\n{'═'*55}")
+        print(f"\n{'='*55}")
         print(f"  {status['project_id']}  |  Stage: {status['pipeline_stage']}  |  World: v{world_ver}")
-        print(f"{'═'*55}")
+        print(f"{'='*55}")
 
         print(f"\n  {'Chapter':<35} {'Status':<15} {'Shots':>5} {'Built':>5} {'$':>6}")
         print(f"  {'-'*35} {'-'*15} {'-'*5} {'-'*5} {'-'*6}")
@@ -253,16 +364,17 @@ class StateManager:
             total = prod.get("total_shots", 0)
             built = prod.get("scenes_built_in_ue5", 0)
             cost = ch.get("costs", {}).get("chapter_total_usd", 0.0)
-            print(f"  {ch['title']:<35} {ch['status']:<15} {total:>5} {built:>5} ${cost:>5.2f}")
+            title = ch.get("title", ch.get("chapter_id", "?"))
+            print(f"  {title:<35} {ch.get('status','?'):<15} {total:>5} {built:>5} ${cost:>5.2f}")
 
         print(f"\n  Gates:")
         for gate_name, gate in status["gates"].items():
-            icon = "✓" if gate["approved"] else "✗"
+            icon = "[OK]" if gate["approved"] else "[  ]"
             print(f"    {icon} {gate_name}")
 
         drift = self.find_version_drift()
         if drift:
-            print(f"\n  ⚠️  Version Drift: {len(drift)} shots built against old world version")
+            print(f"\n  WARNING: Version Drift: {len(drift)} shots built against old world version")
             print(f"     Run: orchestrator check-drift  for details")
 
         print()

@@ -11,9 +11,11 @@ Usage:
   python orchestrator.py --project ./rmib run cinematographer --chapter ch01
   python orchestrator.py --project ./rmib run cinematographer --chapter ch01 --scene ch01_sc02
   python orchestrator.py --project ./rmib run storyboard --chapter ch01
-  python orchestrator.py --project ./rmib run audio --chapter ch01
+  python orchestrator.py --project ./rmib run voice-recording --chapter ch01
+  python orchestrator.py --project ./rmib run sound-fx --chapter ch01
+  python orchestrator.py --project ./rmib run audio-score --chapter ch01
   python orchestrator.py --project ./rmib run assets
-  python orchestrator.py --project ./rmib approve-gate storyboard_to_audio
+  python orchestrator.py --project ./rmib approve-gate screenplay_to_voice_recording
   python orchestrator.py --project ./rmib check-drift
   python orchestrator.py --project ./rmib costs
   python orchestrator.py --project ./rmib git-status
@@ -48,7 +50,7 @@ def cmd_status(project, args):
             sb = shots.get("storyboard_approved", 0)
             print(f"  {scene['scene_id']}  shots:{total}  sb:{sb}  audio:{audio}  built:{built}")
             for flag in shots.get("flagged", []):
-                print(f"    ⚠️  {flag}")
+                print(f"    WARNING:{flag}")
     else:
         sm.print_project_status()
 
@@ -57,11 +59,11 @@ def cmd_approve_gate(project, args):
     gate_name = args.gate
     valid = list(project.data["pipeline"]["gates"].keys())
     if gate_name not in valid:
-        print(f"  ✗ Unknown gate '{gate_name}'")
+        print(f"  [FAIL] Unknown gate '{gate_name}'")
         print(f"  Valid: {', '.join(valid)}")
         sys.exit(1)
     if project.is_gate_open(gate_name):
-        print(f"  ℹ Gate '{gate_name}' already approved.")
+        print(f"  [INFO] Gate '{gate_name}' already approved.")
         return
     print(f"\n  Gate: {gate_name}")
     print(f"  This unlocks the next pipeline stage.")
@@ -76,9 +78,9 @@ def cmd_check_drift(project, args):
     sm = StateManager(project)
     drift = sm.find_version_drift()
     if not drift:
-        print("\n  ✓ No version drift. All built shots match current world version.")
+        print("\n  [OK] No version drift. All built shots match current world version.")
         return
-    print(f"\n  ⚠️  {len(drift)} shots built against old world version:")
+    print(f"\n  WARNING:{len(drift)} shots built against old world version:")
     for item in drift:
         print(f"    {item['shot_id']}  world {item['built_against_world']} → {item['current_world']}")
 
@@ -97,17 +99,17 @@ def cmd_init_repo(project, args):
     gm = GitManager(project)
     gm.init_repo()
     gm.initial_commit()
-    print("\n  ✓ Repository ready.")
+    print("\n  [OK] Repository ready.")
 
 
 def cmd_ready(project, args):
     sm = StateManager(project)
     verbose = getattr(args, 'verbose', False)
     storyboard_ready = sm.get_ready_for_storyboard()
-    audio_ready = sm.get_ready_for_audio()
+    audio_ready = sm.get_ready_for_voice_recording()
     mesh_ready = sm.get_ready_for_mesh_generation()
     print(f"\n  Ready for Storyboard: {len(storyboard_ready)} shots")
-    print(f"  Ready for Audio:      {len(audio_ready)} lines")
+    print(f"  Ready for Recording:  {len(audio_ready)} chapters")
     print(f"  Ready for Meshy:      {len(mesh_ready)} assets")
     if verbose:
         for shot_id in storyboard_ready[:10]:
@@ -120,9 +122,10 @@ def cmd_ready(project, args):
 
 def cmd_run(project, args):
     from stages.pipeline import (
-        IngestStage, ScreenplayStage, CinematographerStage,
-        StoryboardStage, AudioStage, AssetManifestStage
+        IngestStage, ScreenplayStage, CharacterStage, CinematographerStage,
+        StoryboardStage, VoiceRecordingStage, AssetManifestStage
     )
+    from stages.character_sheets import CharacterSheetStage, LoRATrainingStage
 
     stage_name = args.stage
     dry_run = getattr(args, 'dry_run', False)
@@ -136,33 +139,64 @@ def cmd_run(project, args):
         if stage_name == "ingest":
             source = getattr(args, 'source', None)
             if not source:
-                print("  ✗ --source required for ingest")
+                print("  [FAIL] --source required for ingest")
                 sys.exit(1)
             IngestStage(project).run(source, dry_run=dry_run)
 
         elif stage_name == "screenplay":
             if not chapter:
-                print("  ✗ --chapter required")
+                print("  [FAIL] --chapter required")
                 sys.exit(1)
             ScreenplayStage(project).run(chapter, dry_run=dry_run)
 
+        elif stage_name == "characters":
+            CharacterStage(project).run(dry_run=dry_run)
+
+        elif stage_name == "character-sheets":
+            char = getattr(args, 'character', None)
+            force = getattr(args, 'force', False)
+            CharacterSheetStage(project).run(
+                character_id=char, dry_run=dry_run, force=force
+            )
+
+        elif stage_name == "lora-train":
+            char = getattr(args, 'character', None)
+            LoRATrainingStage(project).run(
+                character_id=char, dry_run=dry_run
+            )
+
         elif stage_name == "cinematographer":
             if not chapter:
-                print("  ✗ --chapter required")
+                print("  [FAIL] --chapter required")
                 sys.exit(1)
             CinematographerStage(project).run(chapter, scene_id=scene, dry_run=dry_run)
 
         elif stage_name == "storyboard":
             if not chapter:
-                print("  ✗ --chapter required")
+                print("  [FAIL] --chapter required")
                 sys.exit(1)
-            StoryboardStage(project).run(chapter, dry_run=dry_run)
+            force = getattr(args, 'force', False)
+            StoryboardStage(project).run(chapter, dry_run=dry_run, force=force)
 
-        elif stage_name == "audio":
+        elif stage_name == "voice-recording":
             if not chapter:
-                print("  ✗ --chapter required")
+                print("  [FAIL] --chapter required")
                 sys.exit(1)
-            AudioStage(project).run(chapter, scene_id=scene, dry_run=dry_run)
+            VoiceRecordingStage(project).run(chapter, scene_id=scene, dry_run=dry_run)
+
+        elif stage_name == "sound-fx":
+            from stages.pipeline import SoundFXStage
+            if not chapter:
+                print("  [FAIL] --chapter required")
+                sys.exit(1)
+            SoundFXStage(project).run(chapter, dry_run=dry_run)
+
+        elif stage_name == "audio-score":
+            from stages.pipeline import AudioScoreStage
+            if not chapter:
+                print("  [FAIL] --chapter required")
+                sys.exit(1)
+            AudioScoreStage(project).run(chapter, dry_run=dry_run)
 
         elif stage_name == "assets":
             AssetManifestStage(project).run(chapter_id=chapter, dry_run=dry_run)
@@ -188,12 +222,12 @@ def cmd_run(project, args):
             from stages.mesh_animation import AnimationStage
             char = getattr(args, 'character', None)
             if not char:
-                print("  ✗ --character required for ue5-notes")
+                print("  [FAIL] --character required for ue5-notes")
                 sys.exit(1)
             AnimationStage(project).print_ue5_notes(char)
 
         else:
-            print(f"  ✗ Unknown stage: {stage_name}")
+            print(f"  [FAIL] Unknown stage: {stage_name}")
             sys.exit(1)
 
     except GateLockError as e:
@@ -203,7 +237,7 @@ def cmd_run(project, args):
         print(f"\n  💸 Budget exceeded: {e}")
         sys.exit(1)
     except FileNotFoundError as e:
-        print(f"\n  ✗ File not found: {e}")
+        print(f"\n  [FAIL] File not found: {e}")
         sys.exit(1)
     except KeyboardInterrupt:
         print("\n\n  Interrupted.")
@@ -229,8 +263,11 @@ def main():
     p_run = sub.add_parser("run", help="Run a pipeline stage")
     p_run.add_argument(
         "stage",
-        choices=["ingest", "screenplay", "cinematographer", "storyboard",
-                 "audio", "assets", "meshes", "bg-characters", "animate", "ue5-notes"]
+        choices=["ingest", "screenplay", "characters", "character-sheets", "lora-train",
+                 "voice-recording",
+                 "cinematographer", "storyboard",
+                 "sound-fx", "audio-score", "assets",
+                 "meshes", "bg-characters", "animate", "ue5-notes"]
     )
     p_run.add_argument("--chapter", "-c", help="Chapter ID")
     p_run.add_argument("--scene", "-s", help="Scene ID (optional)")
@@ -238,6 +275,7 @@ def main():
     p_run.add_argument("--batch", help="Batch ID (meshes stage)")
     p_run.add_argument("--source", help="Source text file (ingest only)")
     p_run.add_argument("--dry-run", action="store_true", help="Estimate costs only")
+    p_run.add_argument("--force", action="store_true", help="Regenerate even if output exists")
 
     # approve-gate
     p_gate = sub.add_parser("approve-gate", help="Approve a pipeline gate")
@@ -268,7 +306,7 @@ def main():
     try:
         project = Project(args.project)
     except FileNotFoundError as e:
-        print(f"\n  ✗ {e}")
+        print(f"\n  [FAIL] {e}")
         sys.exit(1)
 
     dispatch = {

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Ingest &amp; World Bible — Babylon Studio{% endblock %}
+
+{% block content %}
+<div id="ingest-root">
+
+  <!-- Source Info -->
+  <div class="flex items-center justify-between mb-6">
+    <h2 class="text-lg font-semibold text-gray-100">Ingest &amp; World Bible</h2>
+    <div class="flex items-center gap-3">
+      <input id="ingest-source-path" type="text" placeholder="Path to source text file..."
+             class="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm text-gray-200 focus:outline-none focus:ring-1 focus:ring-babylon-500 w-64" />
+      <label class="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer">
+        <input type="checkbox" id="ingest-dry-run" class="rounded bg-gray-800 border-gray-600 text-babylon-500 focus:ring-babylon-500">
+        Dry run
+      </label>
+      <button onclick="Ingest.runIngest()"
+              class="px-3 py-1.5 bg-babylon-600 hover:bg-babylon-500 text-white text-sm rounded transition-colors">
+        Re-run Ingest
+      </button>
+    </div>
+  </div>
+
+  <!-- World Bible Summary -->
+  <div id="world-bible-section" class="mb-8">
+    <div class="skeleton h-32 w-full"></div>
+  </div>
+
+  <!-- Chapter Index -->
+  <h3 class="text-base font-semibold text-gray-200 mb-3">Chapters</h3>
+  <div id="chapter-table" class="card p-4 mb-6">
+    <div class="skeleton h-48 w-full"></div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/ingest.js') }}"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => Ingest.init('{{ slug }}'));
+</script>
+{% endblock %}

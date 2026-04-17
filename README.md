@@ -125,12 +125,19 @@ python orchestrator.py --project $PROJECT run screenplay --chapter ch01
 python orchestrator.py --project $PROJECT run cinematographer --chapter ch01
 python orchestrator.py --project $PROJECT run storyboard --chapter ch01
 
-# Review storyboards in the UI, then approve the gate
-python orchestrator.py --project $PROJECT approve-gate storyboard_to_audio
+# Review screenplay in the UI, then approve the gate
+python orchestrator.py --project $PROJECT approve-gate screenplay_to_voice_recording
 
-# Now audio and beyond (costs real money — always dry-run first)
-python orchestrator.py --project $PROJECT run audio --chapter ch01 --dry-run
-python orchestrator.py --project $PROJECT run audio --chapter ch01
+# Voice recording (costs real money — always dry-run first)
+python orchestrator.py --project $PROJECT run voice-recording --chapter ch01 --dry-run
+python orchestrator.py --project $PROJECT run voice-recording --chapter ch01
+
+# Use the Editing Room in the UI to do a first cut, then lock it
+python orchestrator.py --project $PROJECT approve-gate cut_to_sound
+
+# Sound FX and audio score
+python orchestrator.py --project $PROJECT run sound-fx --chapter ch01
+python orchestrator.py --project $PROJECT run audio-score --chapter ch01
 ```
 
 ---

@@ -51,23 +51,31 @@
   "pipeline": {
     "current_stage": "not_started",
     "stages": [
-      "ingest", "world_bible", "characters", "screenplay",
-      "cinematographer", "storyboard", "audio", "asset_manifest",
+      "ingest", "world_bible", "screenplay", "characters", "character_sheets",
+      "lora_training", "voice_recording", "screenplay_review",
+      "cinematographer", "storyboard",
+      "editing_room", "sound_fx", "audio_score", "asset_manifest",
       "mesh_generation", "animation", "scene_assembly",
       "preview_render", "final_render", "post_export"
     ],
     "gates": {
-      "storyboard_to_audio": {
+      "screenplay_to_voice_recording": {
         "approved": false,
         "approved_by": null,
         "approved_at": null,
-        "description": "Human storyboard review complete before ElevenLabs spend"
+        "description": "Screenplay approved before ElevenLabs voice recording spend"
       },
-      "audio_to_assets": {
+      "cut_to_sound": {
         "approved": false,
         "approved_by": null,
         "approved_at": null,
-        "description": "Audio approved before Meshy / Cartwheel spend"
+        "description": "First cut locked before SFX and score generation spend"
+      },
+      "sound_to_assets": {
+        "approved": false,
+        "approved_by": null,
+        "approved_at": null,
+        "description": "Audio complete before Meshy / Cartwheel asset spend"
       },
       "assets_to_scene": {
         "approved": false,
@@ -86,9 +94,10 @@
       "enabled": true,
       "transitions": {
         "ingest_to_screenplay": true,
-        "screenplay_to_cinematographer": true,
+        "screenplay_to_characters": true,
+        "characters_to_character_sheets": true,
         "cinematographer_to_storyboard": true,
-        "audio_to_asset_manifest": true,
+        "sound_fx_to_audio_score": true,
         "mesh_batch_to_next_batch": true
       }
     }
@@ -113,9 +122,25 @@
       "enabled": true,
       "budget_usd": 50.0
     },
-    "stabilityai": {
+    "google_imagen": {
       "enabled": true,
       "budget_usd": 5.0
+    },
+    "stabilityai": {
+      "enabled": false,
+      "model": "sd3-large-turbo",
+      "budget_usd": 10.0
+    },
+    "comfyui": {
+      "enabled": true,
+      "url": "http://localhost:8001",
+      "checkpoint": null,
+      "budget_usd": 0.0,
+      "common_seed": null,
+      "kohya_path": null,
+      "kohya_python": null,
+      "lora_dir": null,
+      "lora_default_weight": 0.8
     }
   },
 
@@ -125,7 +150,8 @@
     "lfs_patterns": [
       "*.fbx", "*.glb", "*.mp3", "*.wav",
       "*.png", "*.jpg", "*.exr", "*.hdr",
-      "*.uasset", "*.umap", "*.pak"
+      "*.uasset", "*.umap", "*.pak",
+      "*.safetensors"
     ]
   },
 
