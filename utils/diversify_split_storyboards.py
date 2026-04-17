@@ -134,6 +134,45 @@ def _character_lora_configs(project: Project, characters: list[str]) -> list[dic
     return configs
 
 
+def _load_character_visuals(project: Project) -> dict:
+    """Load character_visuals dict the same way StoryboardStage does.
+    build_storyboard_prompt expects this shape so the style prefix,
+    inline character descriptions, and costume fields come out right."""
+    visuals: dict = {}
+    project_visuals = project._path("characters", "visual_tags.json")
+    if project_visuals.exists():
+        try:
+            visuals = project._load(project_visuals).get("characters", {}) or {}
+        except Exception:  # noqa: BLE001
+            visuals = {}
+
+    # Enrich from full character.json so inline descriptions have
+    # age, costume, props.
+    for cid in list(visuals.keys()):
+        try:
+            full = project.load_character(cid)
+            desc = full.get("description") or {}
+            assets = full.get("assets") or {}
+            if desc.get("age"):
+                visuals[cid]["age"] = desc["age"]
+            if assets.get("signature_props"):
+                visuals[cid]["signature_props"] = assets["signature_props"]
+            if assets.get("costume_variants"):
+                visuals[cid]["costume_variants"] = assets["costume_variants"]
+        except (FileNotFoundError, KeyError):
+            continue
+    return visuals
+
+
+def _world_visual_style(world: dict) -> str:
+    """Pull the world bible's visual_style and run it through the
+    storyboard-medium adapter so photoreal terms get stripped before
+    we hand it to SDXL. Matches what StoryboardStage does."""
+    from apis.prompt_builder import adapt_style_for_storyboard
+    style = (world or {}).get("visual_style") or ""
+    return adapt_style_for_storyboard(style) if style else ""
+
+
 def diversify_shot(
     project: Project, shot: dict, parent_shot: dict,
     world: dict, comfy, claude, dry_run: bool,
@@ -158,10 +197,30 @@ def diversify_shot(
     ]
     loras = _character_lora_configs(project, chars)
 
+    # Wrap Claude's action prompt in the full pen-and-ink style
+    # prefix + character descriptions + camera/quality suffix the
+    # main StoryboardStage uses. Without this the continuation loses
+    # the pen-and-ink look and renders as generic SDXL output.
+    from apis.prompt_builder import build_storyboard_prompt
+    character_visuals = _load_character_visuals(project)
+    visual_style = _world_visual_style(world)
+    # Temporarily swap the shot's storyboard_prompt so
+    # build_storyboard_prompt picks up the new action text without us
+    # mutating shot.json until after the render succeeds.
+    shot_for_prompt = json.loads(json.dumps(shot))
+    shot_for_prompt.setdefault("storyboard", {})["storyboard_prompt"] = new_prompt
+    final_prompt = build_storyboard_prompt(
+        scene_prompt=new_prompt,
+        shot=shot_for_prompt,
+        character_visuals=character_visuals,
+        visual_style=visual_style,
+    )
+
     result: dict = {
         "shot_id": shot_id,
         "status": "would_render" if dry_run else "rendering",
-        "new_prompt": new_prompt[:160],
+        "new_action_prompt": new_prompt[:160],
+        "full_sdxl_prompt": final_prompt[:220],
         "shot_type": suggestion.get("shot_type"),
         "framing": suggestion.get("framing"),
         "rationale": suggestion.get("rationale"),
@@ -180,23 +239,23 @@ def diversify_shot(
         # Horizontal
         if loras:
             h_meta = comfy.generate_storyboard_with_loras(
-                prompt=new_prompt, output_path=str(h_path),
+                prompt=final_prompt, output_path=str(h_path),
                 lora_configs=loras, width=1344, height=768, seed=seed,
             )
         else:
             h_meta = comfy.generate_storyboard(
-                prompt=new_prompt, output_path=str(h_path),
+                prompt=final_prompt, output_path=str(h_path),
                 width=1344, height=768, seed=seed,
             )
         # Vertical — same seed keeps the composition family feel
         if loras:
             v_meta = comfy.generate_storyboard_with_loras(
-                prompt=new_prompt, output_path=str(v_path),
+                prompt=final_prompt, output_path=str(v_path),
                 lora_configs=loras, width=768, height=1344, seed=seed,
             )
         else:
             v_meta = comfy.generate_storyboard_vertical(
-                prompt=new_prompt, output_path=str(v_path), seed=seed,
+                prompt=final_prompt, output_path=str(v_path), seed=seed,
             )
 
     # Update shot.json. Preserve the parent-inherited cinematic data
@@ -210,6 +269,7 @@ def diversify_shot(
         "shot_type_suggested": suggestion.get("shot_type"),
         "framing_suggested": suggestion.get("framing"),
         "rationale": suggestion.get("rationale"),
+        "final_prompt": final_prompt,
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "horizontal": h_meta,
         "vertical": v_meta,
