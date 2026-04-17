@@ -1398,6 +1398,23 @@ class StoryboardStage(PipelineStage):
 
     def run(self, chapter_id: str, dry_run: bool = False,
             force: bool = False, progress_callback=None) -> dict:
+        # GPU-heavy (ComfyUI SDXL, per-shot). Fail fast if something
+        # else is already using the GPU — the error surfaces the
+        # blocker to the caller.
+        if not dry_run:
+            from core.gpu_lock import gpu_exclusive
+            with gpu_exclusive(f"storyboard:{chapter_id}", blocking=False):
+                return self._run_locked(
+                    chapter_id=chapter_id, dry_run=dry_run,
+                    force=force, progress_callback=progress_callback,
+                )
+        return self._run_locked(
+            chapter_id=chapter_id, dry_run=dry_run,
+            force=force, progress_callback=progress_callback,
+        )
+
+    def _run_locked(self, chapter_id: str, dry_run: bool = False,
+                    force: bool = False, progress_callback=None) -> dict:
         def _progress(pct, msg, cost=0.0):
             if progress_callback:
                 progress_callback(pct, msg, cost)
@@ -2148,13 +2165,22 @@ class SoundFXStage(PipelineStage):
                                       f"SFX: {sfx['prompt'][:40]}",
                                       sfx["shot_id"])
                 else:
-                    if cu is None:
-                        cu = ComfyUIAudioClient()
-                    result = cu.generate_sound_effect(
-                        prompt=sfx["prompt"],
-                        duration_sec=sfx["duration_sec"],
-                        output_path=output_path,
-                    )
+                    # ComfyUI path — serialize against video / LoRA.
+                    # Wait up to 2 min for another GPU job to finish;
+                    # SFX calls are short so being blocking is safer
+                    # than failing and losing the prompt work.
+                    from core.gpu_lock import gpu_exclusive
+                    with gpu_exclusive(
+                        f"sfx_comfyui:{sfx['shot_id']}",
+                        blocking=True, timeout=120.0,
+                    ):
+                        if cu is None:
+                            cu = ComfyUIAudioClient()
+                        result = cu.generate_sound_effect(
+                            prompt=sfx["prompt"],
+                            duration_sec=sfx["duration_sec"],
+                            output_path=output_path,
+                        )
                     cost = 0.0
                 total_cost += cost
                 generated += 1
@@ -2571,6 +2597,21 @@ class PreviewVideoStage(PipelineStage):
 
     def _run_batch(self, *, chapter_id: str, orientations: list[str],
                    force: bool, dry_run: bool, _progress) -> dict:
+        # Acquire the GPU for the whole batch so other stages fail
+        # fast with a clear holder message instead of fighting for
+        # VRAM. Blocks only if another batch already started.
+        from core.gpu_lock import gpu_exclusive
+        with gpu_exclusive(
+            f"preview_video_batch:{chapter_id}:{','.join(orientations)}",
+            blocking=False,
+        ):
+            return self._run_batch_locked(
+                chapter_id=chapter_id, orientations=orientations,
+                force=force, dry_run=dry_run, _progress=_progress,
+            )
+
+    def _run_batch_locked(self, *, chapter_id: str, orientations: list[str],
+                          force: bool, dry_run: bool, _progress) -> dict:
         print(f"\n{'-'*55}")
         print(f"  STAGE: Preview Video (batch) — {chapter_id} "
               f"orientations={orientations} force={force}")
@@ -2667,6 +2708,21 @@ class PreviewVideoStage(PipelineStage):
     def _render_single(self, *, shot_id: str, orientation: str,
                        seed: Optional[int], dry_run: bool,
                        _progress) -> dict:
+        # Serialize GPU access. Reentrant — if a batch is already
+        # holding the lock, this returns immediately.
+        from core.gpu_lock import gpu_exclusive
+        with gpu_exclusive(
+            f"preview_video:{shot_id}:{orientation}",
+            blocking=False,
+        ):
+            return self._render_single_locked(
+                shot_id=shot_id, orientation=orientation,
+                seed=seed, dry_run=dry_run, _progress=_progress,
+            )
+
+    def _render_single_locked(self, *, shot_id: str, orientation: str,
+                              seed: Optional[int], dry_run: bool,
+                              _progress) -> dict:
         print(f"\n{'-'*55}")
         print(f"  STAGE: Preview Video — {shot_id} ({orientation})")
         print(f"{'-'*55}")

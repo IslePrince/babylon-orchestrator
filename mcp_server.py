@@ -123,12 +123,17 @@ def _spawn_job(label: str, fn, kwargs: dict) -> str:
                 s["result"] = result
                 s["finished_at"] = time.time()
         except Exception as e:  # noqa: BLE001
+            # Surface GPU-busy errors as structured metadata so the
+            # caller (an agent, typically) can introspect the blocker
+            # and decide whether to poll or abort.
             with _JOB_LOCK:
                 s = _JOBS[job_id]
                 s["status"] = "error"
                 s["error"] = f"{type(e).__name__}: {e}"
                 s["traceback"] = traceback.format_exc()
                 s["finished_at"] = time.time()
+                if type(e).__name__ == "GPUBusyError":
+                    s["blocked_by"] = getattr(e, "holder", None)
             logger.exception("Job %s failed", job_id)
 
     threading.Thread(target=_run, name=f"babylon-job-{job_id}",
@@ -1061,6 +1066,23 @@ def check_drift(slug: str) -> dict:
     proj = _load_project(slug)
     sm = StateManager(proj)
     return {"drifted": sm.check_drift() or []}
+
+
+@mcp.tool()
+def gpu_status() -> dict:
+    """Return info about the GPU lock: whether a GPU-heavy stage
+    (preview video, storyboard, character sheets, LoRA training,
+    ComfyUI SFX) is currently running, its label, how long it's
+    held the GPU, and the job_id if the caller was a background job.
+
+    GPU-heavy tools fail fast with a structured error that includes
+    this info, so the caller can decide whether to wait or back off.
+    Returns ``{"free": true}`` when nothing is using the GPU."""
+    from core.gpu_lock import gpu_status as _status
+    h = _status()
+    if h is None:
+        return {"free": True}
+    return {"free": False, **h}
 
 
 # ======================================================================

@@ -75,6 +75,27 @@ class CharacterSheetStage:
         Returns:
             Dict with status, per-character results, and total counts.
         """
+        # GPU-heavy (ComfyUI SDXL). Serialize against other GPU jobs.
+        if not dry_run:
+            from core.gpu_lock import gpu_exclusive
+            label = f"character_sheets:{character_id or 'all'}"
+            with gpu_exclusive(label, blocking=False):
+                return self._run_locked(
+                    character_id=character_id, dry_run=dry_run,
+                    progress_callback=progress_callback, force=force,
+                )
+        return self._run_locked(
+            character_id=character_id, dry_run=dry_run,
+            progress_callback=progress_callback, force=force,
+        )
+
+    def _run_locked(
+        self,
+        character_id: Optional[str] = None,
+        dry_run: bool = False,
+        progress_callback=None,
+        force: bool = False,
+    ) -> dict:
         def _progress(pct, msg, cost=0.0):
             if progress_callback:
                 progress_callback(pct, msg, cost)
@@ -341,6 +362,30 @@ class LoRATrainingStage:
             progress_callback: Optional (pct, msg, cost) callback.
             force: Retrain even if a LoRA already exists and is deployed.
         """
+        # LoRA training pegs the GPU for tens of minutes. Serialize
+        # against storyboard / preview video / other LoRA runs.
+        if not dry_run:
+            from core.gpu_lock import gpu_exclusive
+            with gpu_exclusive(
+                f"lora_training:{character_id or 'all'}",
+                blocking=False,
+            ):
+                return self._run_locked(
+                    character_id=character_id, dry_run=dry_run,
+                    progress_callback=progress_callback, force=force,
+                )
+        return self._run_locked(
+            character_id=character_id, dry_run=dry_run,
+            progress_callback=progress_callback, force=force,
+        )
+
+    def _run_locked(
+        self,
+        character_id: Optional[str] = None,
+        dry_run: bool = False,
+        progress_callback=None,
+        force: bool = False,
+    ) -> dict:
         def _progress(pct, msg, cost=0.0):
             if progress_callback:
                 progress_callback(pct, msg, cost)
