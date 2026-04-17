@@ -113,7 +113,9 @@ def _suggest_alternate_framing(claude, parent_shot: dict, world: dict,
 
 def _character_lora_configs(project: Project, characters: list[str]) -> list[dict]:
     """Build the LoRA config list ComfyUIClient expects from the
-    characters visible in the shot."""
+    characters visible in the shot. Looks up the trained LoRA at
+    ``characters/<cid>/lora/<cid>_char.safetensors`` (the layout
+    LoRATrainingStage writes to)."""
     configs = []
     for cid in characters:
         try:
@@ -121,7 +123,7 @@ def _character_lora_configs(project: Project, characters: list[str]) -> list[dic
         except FileNotFoundError:
             continue
         lora_path = project._path(
-            "characters", cid, f"{cid}_char.safetensors"
+            "characters", cid, "lora", f"{cid}_char.safetensors"
         )
         if not lora_path.exists():
             continue
@@ -229,12 +231,29 @@ def diversify_shot(
     if dry_run:
         return result
 
+    # Reuse the parent's seed so the LoRA-locked character identity,
+    # lighting, and palette stay on-model across the cut. The action
+    # text / camera angle differ; the seed keeps everything else in
+    # the same "family". Fall back to a fresh seed only when the
+    # parent wasn't recorded (legacy shot.json without generation_meta).
+    parent_meta = (parent_shot.get("storyboard") or {}).get("generation_meta") or {}
+    parent_seed = parent_meta.get("seed")
+    try:
+        seed = int(parent_seed) if parent_seed is not None else None
+    except (TypeError, ValueError):
+        seed = None
+    if seed is None:
+        seed = int(time.time()) & 0x7FFFFFFF
+        result["seed_source"] = "new_random"
+    else:
+        result["seed_source"] = "parent"
+    result["seed"] = seed
+
     # Serialize GPU access against any other ComfyUI job running.
     from core.gpu_lock import gpu_exclusive
     with gpu_exclusive(f"diversify_storyboard:{shot_id}", blocking=False):
         h_path = shot_dir / "storyboard.png"
         v_path = shot_dir / "storyboard_vertical.png"
-        seed = int(time.time()) & 0x7FFFFFFF
 
         # Horizontal
         if loras:
@@ -270,6 +289,9 @@ def diversify_shot(
         "framing_suggested": suggestion.get("framing"),
         "rationale": suggestion.get("rationale"),
         "final_prompt": final_prompt,
+        "seed": seed,
+        "seed_source": result.get("seed_source"),
+        "loras_used": [c["file"] for c in loras],
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "horizontal": h_meta,
         "vertical": v_meta,
