@@ -321,17 +321,33 @@ def diversify_shot(
 
 def diversify_chapter(
     project: Project, chapter_id: str, only_shot: Optional[str],
-    dry_run: bool,
+    dry_run: bool, progress_callback=None,
 ) -> dict:
+    """Diversify every continuation shot's storyboard.
+
+    ``progress_callback(pct, msg, cost=0.0)`` is invoked between
+    shots and on each completion so the Editing Room's Active Jobs
+    panel can stream a moving progress bar instead of showing a
+    30-minute silence between 10% and 100%.
+    """
+    def _emit(pct: float, msg: str, cost: float = 0.0) -> None:
+        if progress_callback:
+            try:
+                progress_callback(pct, msg, cost)
+            except Exception:  # noqa: BLE001
+                pass
+
     from apis.claude_client import ClaudeClient
     from apis.comfyui import ComfyUIClient
 
+    _emit(2.0, f"Loading world bible for {chapter_id}...")
     world = project.load_world_bible().get("world_bible", {}) or {}
     shots_dir = project._path("chapters", chapter_id, "shots")
     if not shots_dir.exists():
         return {"chapter_id": chapter_id, "status": "no_shots_dir"}
 
     # Collect continuation shots.
+    _emit(4.0, "Scanning for continuation shots...")
     continuations: list[tuple[Path, dict]] = []
     all_shots: dict[str, dict] = {}
     for sd in sorted(shots_dir.iterdir()):
@@ -349,8 +365,11 @@ def diversify_chapter(
             continuations.append((sd, shot))
 
     if not continuations:
+        _emit(100.0, "No continuation shots found")
         return {"chapter_id": chapter_id, "status": "no_continuations",
                 "only_shot": only_shot}
+
+    _emit(6.0, f"Found {len(continuations)} continuation shot(s)")
 
     claude = ClaudeClient()
     summary: dict = {
@@ -361,11 +380,22 @@ def diversify_chapter(
         "entries": [],
     }
 
+    # Map per-shot progress into the 8% -> 98% band so we keep small
+    # bands at the head (scan) and tail (finalize) of the bar.
+    n = len(continuations)
+    band_lo, band_hi = 8.0, 98.0
     with ComfyUIClient() as comfy:
         for i, (sd, shot) in enumerate(continuations):
             sid = shot["shot_id"]
             parent_id = _parent_shot_id(sid) or sid
             parent = all_shots.get(parent_id) or shot
+
+            start_pct = band_lo + (band_hi - band_lo) * (i / n)
+            _emit(
+                start_pct,
+                f"[{i+1}/{n}] {sid}: asking Claude for alternate angle",
+            )
+
             try:
                 r = diversify_shot(
                     project, shot, parent, world, comfy, claude, dry_run,
@@ -373,13 +403,29 @@ def diversify_chapter(
                 summary["entries"].append(r)
                 if r["status"] == "rendered":
                     summary["diversified"] += 1
-                print(f"  [{i+1}/{len(continuations)}] {sid} -> "
+
+                end_pct = band_lo + (band_hi - band_lo) * ((i + 1) / n)
+                status_bits = [r.get("status", "?")]
+                if r.get("shot_type"):
+                    status_bits.append(r["shot_type"])
+                _emit(
+                    end_pct,
+                    f"[{i+1}/{n}] {sid}: {' / '.join(status_bits)}",
+                )
+                print(f"  [{i+1}/{n}] {sid} -> "
                       f"{r['status']} {r.get('shot_type', '')}/"
                       f"{r.get('framing', '')}")
             except Exception as e:  # noqa: BLE001
                 summary["failed"].append({"shot_id": sid, "error": str(e)})
-                print(f"  [{i+1}/{len(continuations)}] {sid} -> FAIL: {e}")
+                end_pct = band_lo + (band_hi - band_lo) * ((i + 1) / n)
+                _emit(end_pct, f"[{i+1}/{n}] {sid}: FAILED - {e}")
+                print(f"  [{i+1}/{n}] {sid} -> FAIL: {e}")
 
+    _emit(
+        99.0,
+        f"Finalizing: diversified {summary['diversified']} / {n}, "
+        f"failed {len(summary['failed'])}",
+    )
     return summary
 
 

@@ -2544,21 +2544,22 @@ class DiversifyStoryboardsStage(PipelineStage):
                 progress_callback(pct, msg, cost)
 
         print(f"\n{'-'*55}")
-        print(f"  STAGE: Diversify Storyboards — {chapter_id}"
+        print(f"  STAGE: Diversify Storyboards - {chapter_id}"
               + (f" / {shot_id}" if shot_id else ""))
         print(f"{'-'*55}")
 
-        _progress(5, "Scanning for continuation shots...")
+        _progress(1, "Starting diversify...")
         from utils.diversify_split_storyboards import diversify_chapter
-        # The util handles per-shot progress to stdout; we emit
-        # coarse endpoints around it so the SSE progress bar moves.
-        _progress(10, "Rendering alternate-angle storyboards...")
+        # The util emits per-shot progress into the 2-98% band so the
+        # SSE bar moves continuously across the ~30-minute run instead
+        # of sitting at 10% between the first and last shot.
         result = diversify_chapter(
             project=self.project, chapter_id=chapter_id,
             only_shot=shot_id, dry_run=dry_run,
+            progress_callback=progress_callback,
         )
         _progress(100, (
-            f"Done — diversified {result.get('diversified', 0)} of "
+            f"Done - diversified {result.get('diversified', 0)} of "
             f"{result.get('to_diversify', 0)} continuation(s)"
         ))
         return result
