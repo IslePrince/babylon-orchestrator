@@ -536,25 +536,43 @@ const EditingRoom = {
       cutAudio.addEventListener('timeupdate', EditingRoom._cutClampHandler);
     }
 
+    // Clock-anchored shot driver.
+    // ---------------------------
+    // The previous version chained setTimeout(playNext, visualDurMs)
+    // for each shot. That made the cut's progression fragile: a
+    // single blocked frame (tab backgrounded, long style
+    // re-layout, a GC pause) would push the next tick off by
+    // hundreds of ms, sometimes in the wrong direction relative to
+    // the audio. The user-visible symptom was "moved on too early
+    // sometimes" when the audio had finished but the setTimeout was
+    // still queued behind other event-loop work.
+    //
+    // Now: each shot records a deadline on the monotonic clock
+    // (performance.now()). A single 100 ms driver polls that
+    // deadline. If we've overshot, advance; if not, keep waiting.
+    // This is immune to single-tick jitter, self-corrects when the
+    // browser de-throttles, and avoids the double-scheduling
+    // pattern that could fire two advances for the same shot.
     let i = 0;
-    const playNext = () => {
-      if (i >= enabledShots.length || !EditingRoom.playing) {
-        EditingRoom.stopCut();
-        return;
-      }
+    EditingRoom._cutState = { index: -1, shotId: null, deadline: 0 };
 
-      const shot = enabledShots[i];
+    const enterShot = (idx) => {
+      const shot = enabledShots[idx];
       EditingRoom.selectShot(shot._idx);
-      const pct = Math.round(((i + 1) / enabledShots.length) * 100);
+      const pct = Math.round(((idx + 1) / enabledShots.length) * 100);
       fillEl.style.width = pct + '%';
-      labelEl.textContent = `Playing ${i + 1}/${enabledShots.length}: ${shot.shot_id}`;
+      labelEl.textContent =
+        `Playing ${idx + 1}/${enabledShots.length}: ${shot.shot_id}`;
 
       const line = (shot.audio_lines || [])[0];
-      const visualDurMs = (shot.edit.duration_sec || shot.original_duration_sec) * 1000;
+      const visualDurMs =
+        (shot.edit.duration_sec || shot.original_duration_sec) * 1000;
+      EditingRoom._cutState = {
+        index: idx,
+        shotId: shot.shot_id,
+        deadline: performance.now() + visualDurMs,
+      };
 
-      // Trigger SFX layered over the dialogue track. Each SFX starts at
-      // the top of the shot and runs for its own duration; it's fine if
-      // they bleed into the next shot a little.
       EditingRoom._startShotSfx(shot);
 
       if (line && line.audio_ref
@@ -564,9 +582,7 @@ const EditingRoom = {
         const start = line.start_time_sec;
         const end = line.end_time_sec;
         EditingRoom._cutSliceEnd = end;
-
         if (line.audio_ref !== EditingRoom._cutCurrentRef) {
-          // New recording — load it, then seek + play on metadata.
           EditingRoom._cutCurrentRef = line.audio_ref;
           cutAudio.src = src;
           cutAudio.addEventListener('loadedmetadata', function onMeta() {
@@ -575,24 +591,38 @@ const EditingRoom = {
             cutAudio.play().catch(() => {});
           }, { once: true });
         } else {
-          // Same recording — if audio already sits at this slice's
-          // start (bridge-tiled adjacent shots), just resume; else seek.
           if (Math.abs(cutAudio.currentTime - start) > 0.15) {
             try { cutAudio.currentTime = start; } catch (e) { /* noop */ }
           }
           if (cutAudio.paused) cutAudio.play().catch(() => {});
         }
       } else {
-        // No audio for this shot — pause any ongoing playback.
         EditingRoom._cutSliceEnd = Infinity;
         if (!cutAudio.paused) cutAudio.pause();
       }
-
-      i++;
-      EditingRoom.playTimer = setTimeout(playNext, visualDurMs);
     };
 
-    playNext();
+    const tick = () => {
+      if (!EditingRoom.playing) { EditingRoom.stopCut(); return; }
+      const now = performance.now();
+      const st = EditingRoom._cutState;
+      if (now >= st.deadline) {
+        const next = st.index + 1;
+        if (next >= enabledShots.length) {
+          EditingRoom.stopCut();
+          return;
+        }
+        enterShot(next);
+      }
+      // Re-arm the single driver. 100 ms cadence gives us at worst
+      // a tenth-of-a-second slip at shot boundaries, which is below
+      // the threshold of perception for cuts and audible in no
+      // other way.
+      EditingRoom.playTimer = setTimeout(tick, 100);
+    };
+
+    enterShot(0);
+    EditingRoom.playTimer = setTimeout(tick, 100);
   },
 
   // Play the currently-selected shot as a layered mix: dialogue slice
