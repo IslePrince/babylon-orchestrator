@@ -1069,6 +1069,30 @@ def check_drift(slug: str) -> dict:
 
 
 @mcp.tool()
+def diversify_split_storyboards(
+    slug: str, chapter_id: str,
+    shot_id: Optional[str] = None, dry_run: bool = False,
+) -> dict:
+    """For each shot in the chapter that's a split continuation
+    (ids like ``ch01_sc01_sh006b``, labels ending ``(cont'd)``),
+    ask Claude for an alternate camera angle and render a fresh
+    storyboard (both 16:9 and 9:16) through ComfyUI so the preview
+    cut doesn't show the same frame on both halves. Any stale
+    ``preview_*.mp4`` on the touched shot is cleared — run
+    ``run_preview_video_async`` afterward to regenerate the videos
+    against the new storyboards.
+
+    Pass ``shot_id`` to target a single continuation shot; omit to
+    diversify every continuation in the chapter."""
+    from utils.diversify_split_storyboards import diversify_chapter
+    proj = _load_project(slug)
+    return diversify_chapter(
+        project=proj, chapter_id=chapter_id,
+        only_shot=shot_id, dry_run=dry_run,
+    )
+
+
+@mcp.tool()
 def comfyui_unstick(force: bool = False, wait_sec: float = 5.0,
                    comfyui_url: str | None = None) -> dict:
     """Recover a wedged ComfyUI server by sending /interrupt and

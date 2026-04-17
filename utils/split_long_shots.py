@@ -169,8 +169,17 @@ def _new_shot_id(original: str, existing_ids: set[str]) -> str:
 def _insert_after(index_shots: list[dict], after_shot_id: str,
                   new_entry: dict) -> None:
     """Mutate ``index_shots`` so ``new_entry`` sits right after the
-    ``after_shot_id`` entry. If ``after_shot_id`` isn't present, the
-    new entry is appended."""
+    ``after_shot_id`` entry. Skips the insert when the new entry's
+    shot_id is already present (protects against the pass-2-over-
+    pass-1 duplication we hit on ch01). If ``after_shot_id`` isn't
+    present, the new entry is appended."""
+    target_id = new_entry.get("shot_id")
+    for entry in index_shots:
+        if entry.get("shot_id") == target_id:
+            # Already in the index — refresh its duration/label in
+            # case the split updated them, but don't add a second row.
+            entry.update(new_entry)
+            return
     for i, entry in enumerate(index_shots):
         if entry.get("shot_id") == after_shot_id:
             index_shots.insert(i + 1, new_entry)
@@ -397,6 +406,12 @@ def main() -> int:
                     help=f"Shots with total slice > this are split "
                          f"(default {DEFAULT_MAX_SEC}s).")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--diversify", action="store_true",
+                    help="After splitting, immediately ask Claude for "
+                         "alternate camera angles on the new "
+                         "continuation shots and re-render their "
+                         "storyboards via ComfyUI so the cut doesn't "
+                         "show the same frame twice.")
     args = ap.parse_args()
 
     project = Project(args.project)
@@ -412,6 +427,19 @@ def main() -> int:
               f"@ t={s['split_at_sec']}s")
         print(f"      head: {s['head_text']!r}")
         print(f"      tail: {s['tail_text']!r}")
+
+    if args.diversify and not args.dry_run and stats["split"] > 0:
+        print("\n--- Diversifying continuation storyboards ---")
+        from utils.diversify_split_storyboards import diversify_chapter
+        div = diversify_chapter(
+            project=project, chapter_id=args.chapter,
+            only_shot=None, dry_run=False,
+        )
+        print(json.dumps(
+            {k: v for k, v in div.items() if k != "entries"},
+            indent=2,
+        ))
+
     return 0
 
 
