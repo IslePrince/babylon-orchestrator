@@ -34,6 +34,15 @@ import uuid
 from pathlib import Path
 from typing import Any, Optional
 
+# Same UTF-8 defence as ui/server.py — Windows cp1252 stdout can't
+# handle unicode arrows / bullets / em-dashes that appear inside
+# some stages' print() statements.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:  # noqa: BLE001
+        pass
+
 # Keep imports relative to the orchestrator root so every stage/util
 # can be invoked the same way the Flask UI does.
 SCRIPT_DIR = Path(__file__).resolve().parent

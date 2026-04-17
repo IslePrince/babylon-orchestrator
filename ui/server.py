@@ -13,6 +13,16 @@ import os
 import sys
 from pathlib import Path
 
+# Windows PowerShell still defaults stdout/stderr to cp1252, which
+# chokes on unicode arrows/em-dashes/bullets that some stages print.
+# Reconfigure both streams to UTF-8 with replace-on-error so a stray
+# non-ASCII char in a stage's print() can never crash a job.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:  # noqa: BLE001
+        pass
+
 # Add orchestrator root to sys.path so core/ and stages/ imports resolve
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 

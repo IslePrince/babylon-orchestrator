@@ -373,12 +373,12 @@ def diversify_chapter(
                 summary["entries"].append(r)
                 if r["status"] == "rendered":
                     summary["diversified"] += 1
-                print(f"  [{i+1}/{len(continuations)}] {sid} → "
+                print(f"  [{i+1}/{len(continuations)}] {sid} -> "
                       f"{r['status']} {r.get('shot_type', '')}/"
                       f"{r.get('framing', '')}")
             except Exception as e:  # noqa: BLE001
                 summary["failed"].append({"shot_id": sid, "error": str(e)})
-                print(f"  [{i+1}/{len(continuations)}] {sid} → FAIL: {e}")
+                print(f"  [{i+1}/{len(continuations)}] {sid} -> FAIL: {e}")
 
     return summary
 
