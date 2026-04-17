@@ -2538,14 +2538,16 @@ class DiversifyStoryboardsStage(PipelineStage):
     """
 
     def run(self, chapter_id: str, shot_id: Optional[str] = None,
-            dry_run: bool = False, progress_callback=None) -> dict:
+            dry_run: bool = False, force: bool = False,
+            progress_callback=None) -> dict:
         def _progress(pct, msg, cost=0.0):
             if progress_callback:
                 progress_callback(pct, msg, cost)
 
         print(f"\n{'-'*55}")
         print(f"  STAGE: Diversify Storyboards - {chapter_id}"
-              + (f" / {shot_id}" if shot_id else ""))
+              + (f" / {shot_id}" if shot_id else "")
+              + (" [force]" if force else ""))
         print(f"{'-'*55}")
 
         _progress(1, "Starting diversify...")
@@ -2555,7 +2557,7 @@ class DiversifyStoryboardsStage(PipelineStage):
         # of sitting at 10% between the first and last shot.
         result = diversify_chapter(
             project=self.project, chapter_id=chapter_id,
-            only_shot=shot_id, dry_run=dry_run,
+            only_shot=shot_id, dry_run=dry_run, force=force,
             progress_callback=progress_callback,
         )
         _progress(100, (

@@ -932,20 +932,21 @@ const EditingRoom = {
       App.showToast(`Unknown orientation "${orient}"`, 'error');
       return;
     }
-    const forceRegen = confirm(
-      `Generate ${orientation} previews for ${shots.length} shots in ${EditingRoom.chapterId}.\n\n` +
-      `Shots that already have the chosen preview will be SKIPPED ` +
-      `by default — click OK to skip, or Cancel to force regenerate ` +
-      `all of them (overwrites existing mp4s).\n\n` +
-      `OK = skip existing   /   Cancel = force regenerate all`,
-    );
-    // Cancel on this confirm means user wants force-regen (opposite of
-    // the usual Cancel = abort semantic). Give them one more chance.
-    const force = !forceRegen;
-    if (force && !confirm(
-      `Force-regenerate EVERY ${orientation} preview in the chapter? ` +
-      `This overwrites existing mp4s and takes ~10s–30min per shot.`,
+    // Two sequential confirms with plain semantics — Cancel always
+    // aborts, OK always proceeds. The earlier "Cancel = force" UX
+    // silently produced unintended force-regenerate runs that
+    // re-rendered shots already done.
+    if (!confirm(
+      `Generate ${orientation} previews for ${shots.length} shots in ${EditingRoom.chapterId}?\n\n` +
+      `Shots that already have the chosen preview will be skipped.\n\n` +
+      `OK = proceed   /   Cancel = abort`,
     )) return;
+
+    const force = confirm(
+      `Also FORCE-regenerate shots that already have a preview?\n\n` +
+      `OK   = YES, regenerate everything (overwrites existing mp4s, slow).\n` +
+      `Cancel = NO, skip already-rendered shots (recommended).`,
+    );
 
     // Rough wall-time estimate — 10s of GPU per 1s of output
     let estDialogueS = 0, estSilentS = 0;

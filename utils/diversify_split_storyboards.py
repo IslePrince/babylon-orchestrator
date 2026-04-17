@@ -319,9 +319,18 @@ def diversify_shot(
     return result
 
 
+def _already_diversified(shot: dict) -> bool:
+    """A shot has been diversified when its storyboard.generation_meta
+    carries ``diversified_from`` — the stamp the utility writes on
+    every successful render. Lets re-runs skip shots that were
+    already rolled."""
+    meta = (shot.get("storyboard") or {}).get("generation_meta") or {}
+    return bool(meta.get("diversified_from"))
+
+
 def diversify_chapter(
     project: Project, chapter_id: str, only_shot: Optional[str],
-    dry_run: bool, progress_callback=None,
+    dry_run: bool, progress_callback=None, force: bool = False,
 ) -> dict:
     """Diversify every continuation shot's storyboard.
 
@@ -329,6 +338,11 @@ def diversify_chapter(
     shots and on each completion so the Editing Room's Active Jobs
     panel can stream a moving progress bar instead of showing a
     30-minute silence between 10% and 100%.
+
+    ``force=False`` (the default) skips continuations whose
+    ``generation_meta.diversified_from`` is already set — so a
+    re-run only touches continuations that were missed the first
+    time. Pass ``force=True`` to re-roll every continuation.
     """
     def _emit(pct: float, msg: str, cost: float = 0.0) -> None:
         if progress_callback:
@@ -350,6 +364,7 @@ def diversify_chapter(
     _emit(4.0, "Scanning for continuation shots...")
     continuations: list[tuple[Path, dict]] = []
     all_shots: dict[str, dict] = {}
+    skipped_already: list[str] = []
     for sd in sorted(shots_dir.iterdir()):
         if not sd.is_dir():
             continue
@@ -361,15 +376,29 @@ def diversify_chapter(
         all_shots[shot["shot_id"]] = shot
         if only_shot and shot["shot_id"] != only_shot:
             continue
-        if _is_continuation(shot):
-            continuations.append((sd, shot))
+        if not _is_continuation(shot):
+            continue
+        if not force and _already_diversified(shot):
+            skipped_already.append(shot["shot_id"])
+            continue
+        continuations.append((sd, shot))
 
     if not continuations:
-        _emit(100.0, "No continuation shots found")
-        return {"chapter_id": chapter_id, "status": "no_continuations",
-                "only_shot": only_shot}
+        msg = "No continuation shots to diversify"
+        if skipped_already:
+            msg += f" ({len(skipped_already)} already diversified; pass force=True to re-roll)"
+        _emit(100.0, msg)
+        return {
+            "chapter_id": chapter_id,
+            "status": "nothing_to_do" if skipped_already else "no_continuations",
+            "only_shot": only_shot,
+            "skipped_already_diversified": skipped_already,
+        }
 
-    _emit(6.0, f"Found {len(continuations)} continuation shot(s)")
+    _emit(6.0,
+          f"Found {len(continuations)} to diversify"
+          + (f"; skipping {len(skipped_already)} already done"
+             if skipped_already else ""))
 
     claude = ClaudeClient()
     summary: dict = {
@@ -438,12 +467,16 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true",
                     help="Call Claude for suggestions but don't render "
                          "and don't write shot.json.")
+    ap.add_argument("--force", action="store_true",
+                    help="Re-roll continuations that have already been "
+                         "diversified (generation_meta.diversified_from "
+                         "is set). Default skips them.")
     args = ap.parse_args()
     project = Project(args.project)
 
     result = diversify_chapter(
         project=project, chapter_id=args.chapter,
-        only_shot=args.shot, dry_run=args.dry_run,
+        only_shot=args.shot, dry_run=args.dry_run, force=args.force,
     )
     print()
     print(json.dumps({k: v for k, v in result.items() if k != "entries"},

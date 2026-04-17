@@ -191,6 +191,8 @@ def run_stage(slug):
         run_kwargs["chapter_id"] = data.get("chapter_id")
         if data.get("shot_id"):
             run_kwargs["shot_id"] = data["shot_id"]
+        if data.get("force"):
+            run_kwargs["force"] = True
 
     def _run():
         logger.info(f"[{job_id}] Starting stage '{stage_name}' for project '{slug}'")

@@ -1081,6 +1081,7 @@ def check_drift(slug: str) -> dict:
 def diversify_split_storyboards(
     slug: str, chapter_id: str,
     shot_id: Optional[str] = None, dry_run: bool = False,
+    force: bool = False,
 ) -> dict:
     """For each shot in the chapter that's a split continuation
     (ids like ``ch01_sc01_sh006b``, labels ending ``(cont'd)``),
@@ -1092,12 +1093,18 @@ def diversify_split_storyboards(
     against the new storyboards.
 
     Pass ``shot_id`` to target a single continuation shot; omit to
-    diversify every continuation in the chapter."""
+    diversify every continuation in the chapter.
+
+    ``force=False`` (default) skips continuations whose
+    ``generation_meta.diversified_from`` is already set, so a re-run
+    only touches shots that were missed on the prior pass.
+    ``force=True`` re-rolls every continuation (useful if you want
+    fresh Claude-suggested angles)."""
     from utils.diversify_split_storyboards import diversify_chapter
     proj = _load_project(slug)
     return diversify_chapter(
         project=proj, chapter_id=chapter_id,
-        only_shot=shot_id, dry_run=dry_run,
+        only_shot=shot_id, dry_run=dry_run, force=force,
     )
 
 
